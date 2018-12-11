@@ -1,0 +1,17 @@
+Package: soundcluster
+Type: Package
+Title: Extract sounds from WAV files and cluster them
+Version: 0.1.0
+Authors@R: person(
+    "Thierry", "Onkelinx", role = c("aut", "cre"), 
+    email = "soundcluster@muscardinus.be", 
+    comment = c(ORCID = "0000-0001-8804-4216"))
+Maintainer: Thierry Onkelinx <soundcluster@muscardinus.be>
+Description: Read WAV files and convert them into sonograms. Sounds above a threshold are extracted from the sonogram and converted in a set of standardised measures. Finaly sounds are clustered based on the similarity between there measures.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.1.1
+Imports:
+  assertthat,
+  methods
