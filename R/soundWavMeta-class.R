@@ -24,13 +24,13 @@ setValidity(
   "soundWavMeta",
   function(object){
     assert_that(
-      has_name(object@Recording, "ID"),
-      has_name(object@Recording, "Fingerprint"),
-      has_name(object@Recording, "Filename"),
-      has_name(object@Recording, "Timestamp"),
-      has_name(object@Recording, "SampleRate"),
-      has_name(object@Recording, "TEFactor"),
-      has_name(object@Recording, "LeftChannel")
+      has_name(object@Recording, "id"),
+      has_name(object@Recording, "fingerprint"),
+      has_name(object@Recording, "filename"),
+      has_name(object@Recording, "timestamp"),
+      has_name(object@Recording, "sample_rate"),
+      has_name(object@Recording, "te_factor"),
+      has_name(object@Recording, "left_channel")
     )
 
     return(TRUE)
