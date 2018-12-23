@@ -15,3 +15,6 @@ RoxygenNote: 6.1.1
 Imports:
   assertthat,
   methods
+Collate: 
+    'soundWavMeta-class.R'
+    'soundWav-class.R'
