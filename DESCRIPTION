@@ -19,5 +19,6 @@ Imports:
   tuneR
 Collate: 
     'soundWavMeta-class.R'
+    'soundSpectrogramMeta-class.R'
     'soundWav-class.R'
     'sound_wav.R'
