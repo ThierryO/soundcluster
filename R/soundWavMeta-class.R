@@ -3,7 +3,7 @@
 #' It holds metadata on recordings
 #' @section Slots:
 #'   \describe{
-#'    \item{\code{Recording}}{A data.frame with ID, Fingerprint, Filename, Timestamp, SampleRate, SampleRate, TEFactor, LeftChannel}
+#'    \item{\code{Recording}}{A data.frame with id, fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
 #'   }
 #' @name soundWavMeta-class
 #' @rdname soundWavMeta-class
@@ -24,7 +24,6 @@ setValidity(
   "soundWavMeta",
   function(object){
     assert_that(
-      has_name(object@Recording, "id"),
       has_name(object@Recording, "fingerprint"),
       has_name(object@Recording, "filename"),
       has_name(object@Recording, "timestamp"),

@@ -4,23 +4,27 @@
 \alias{sound_wav}
 \title{create a soundWav object}
 \usage{
-sound_wav(filename, timestamp, channel = c("left", "right"),
-  te_factor = 1, sample_rate, values)
+sound_wav(filename, channel = c("left", "right"), te_factor = 1,
+  max_length = 5)
 }
 \arguments{
 \item{filename}{The name of the file}
-
-\item{timestamp}{the timestamp of the file}
 
 \item{channel}{Select the left or the right channel}
 
 \item{te_factor}{The factor to which the original sound was slowed down prior
 to recording}
 
-\item{sample_rate}{the realtime sample rate}
-
-\item{values}{the recorded values}
+\item{max_length}{Maximum length of the recording to use in seconds. If the
+recording is longer, the last part is ignored.}
 }
 \description{
 create a soundWav object
+}
+\examples{
+wav <- sound_wav(
+  system.file("demo.wav", package = "soundcluster"),
+  channel = "right",
+  te_factor = 10
+)
 }

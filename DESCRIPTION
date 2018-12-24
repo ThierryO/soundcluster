@@ -15,7 +15,8 @@ RoxygenNote: 6.1.1
 Imports:
   assertthat,
   digest,
-  methods
+  methods,
+  tuneR
 Collate: 
     'soundWavMeta-class.R'
     'soundWav-class.R'
