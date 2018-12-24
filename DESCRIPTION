@@ -16,6 +16,7 @@ Imports:
   assertthat,
   digest,
   methods,
+  signal,
   tuneR
 Collate: 
     'import_S3_classes.R'
@@ -25,3 +26,4 @@ Collate:
     'soundSpectrogram-class.R'
     'soundWav-class.R'
     'sound_wav.R'
+    'wav2spectrogram.R'

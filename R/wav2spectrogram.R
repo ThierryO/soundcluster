@@ -1,0 +1,59 @@
+#' Convert the output of read_wav to a spectrogram
+#' @param wav An object as created by \code{\link{sound_wav}}
+#' @param window_ms The size of the window in microseconds. Default to 1.
+#' @param overlap The overlap of two windows. Defaults to 0.9.
+#' @importFrom assertthat assert_that has_name is.number
+#' @importFrom signal specgram
+#' @importFrom stats median
+#' @importFrom methods validObject
+#' @export
+#' @examples
+#' wav <- sound_wav(
+#'   system.file("demo.wav", package = "soundcluster"),
+#'   channel = "right",
+#'   te_factor = 10
+#' )
+#' wav2spectrogram(wav)
+wav2spectrogram <- function(wav, window_ms = 1, overlap = 0.9){
+  assert_that(
+    inherits(wav, "soundWav"),
+    is.number(window_ms),
+    window_ms > 0,
+    is.number(overlap),
+    overlap > 0,
+    overlap < 1
+  )
+  validObject(wav)
+
+  window_n <- next_power_2(wav@Recording$sample_rate * window_ms / 1000)
+  spectrogram <- specgram(
+    x = wav@Values,
+    n = window_n,
+    Fs = wav@Recording$sample_rate,
+    overlap = ceiling(overlap * window_n)
+  )
+  spectrogram$S <- 20 * log10(abs(spectrogram$S))
+  spectrogram$S <- spectrogram$S - median(spectrogram$S)
+  fingerprint <- sha1(
+    list(
+      recording = wav@Recording$fingerprint,
+      window_ms = window_ms,
+      window_n = window_n,
+      overlap = overlap
+    )
+  )
+  spectrogram_meta <- data.frame(
+    fingerprint = fingerprint,
+    window_ms = window_ms,
+    window_n = window_n,
+    overlap = overlap,
+    recording = wav@Recording$fingerprint,
+    stringsAsFactors = FALSE
+  )
+  new(
+    "soundSpectrogram",
+    Recording = wav@Recording,
+    Spectrogram = spectrogram_meta,
+    SpecGram = spectrogram
+  )
+}
