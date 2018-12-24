@@ -10,8 +10,8 @@
 #' @examples
 #' wav <- sound_wav(
 #'   system.file("demo.wav", package = "soundcluster"),
-#'   channel = "right",
-#'   te_factor = 10
+#'   te_factor = 10,
+#'   max_length = 0.1
 #' )
 #' wav2spectrogram(wav)
 wav2spectrogram <- function(wav, window_ms = 1, overlap = 0.9){

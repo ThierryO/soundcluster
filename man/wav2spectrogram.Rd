@@ -19,8 +19,8 @@ Convert the output of read_wav to a spectrogram
 \examples{
 wav <- sound_wav(
   system.file("demo.wav", package = "soundcluster"),
-  channel = "right",
-  te_factor = 10
+  te_factor = 10,
+  max_length = 0.1
 )
 wav2spectrogram(wav)
 }

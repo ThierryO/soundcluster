@@ -8,8 +8,8 @@
 #' @examples
 #' wav <- sound_wav(
 #'   system.file("demo.wav", package = "soundcluster"),
-#'   channel = "right",
-#'   te_factor = 10
+#'   te_factor = 10,
+#'   max_length = 0.1
 #' )
 #' @export
 #' @importFrom assertthat assert_that is.string is.number
