@@ -18,7 +18,9 @@ Imports:
   methods,
   tuneR
 Collate: 
+    'import_S3_classes.R'
     'soundWavMeta-class.R'
     'soundSpectrogramMeta-class.R'
+    'soundSpectrogram-class.R'
     'soundWav-class.R'
     'sound_wav.R'
