@@ -16,9 +16,11 @@ Imports:
   assertthat,
   digest,
   methods,
+  raster,
   signal,
   tuneR
 Collate: 
+    'extract_full_pulse.R'
     'import_S3_classes.R'
     'next_power_2.R'
     'soundWavMeta-class.R'
