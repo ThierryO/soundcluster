@@ -27,6 +27,7 @@ setValidity(
   "soundWav",
   function(object){
     assert_that(is.vector(object@Values))
+    assert_that(nrow(object@Recording) == 1)
     return(TRUE)
   }
 )

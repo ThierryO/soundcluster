@@ -19,7 +19,7 @@ setClass(
 )
 
 #' @importFrom methods setValidity
-#' @importFrom assertthat assert_that has_name
+#' @importFrom assertthat assert_that has_name noNA
 setValidity(
   "soundWavMeta",
   function(object){
@@ -31,6 +31,24 @@ setValidity(
       has_name(object@Recording, "te_factor"),
       has_name(object@Recording, "left_channel")
     )
+    assert_that(
+      inherits(object@Recording$fingerprint, "character"),
+      inherits(object@Recording$filename, "character"),
+      inherits(object@Recording$timestamp, "POSIXct"),
+      inherits(object@Recording$sample_rate, "numeric"),
+      inherits(object@Recording$te_factor, "numeric"),
+      inherits(object@Recording$left_channel, "logical"),
+      noNA(object@Recording)
+    )
+    if (anyDuplicated(object@Recording$fingerprint) > 0) {
+      stop("Duplicated recording fingerprint")
+    }
+    if (any(object@Recording$sample_rate <= 0)) {
+      stop("recording sample_rate must be strict positive")
+    }
+    if (any(object@Recording$te_factor <= 0)) {
+      stop("recording te_factor must be strict positive")
+    }
 
     return(TRUE)
   }

@@ -22,3 +22,17 @@ setClass(
   ),
   contains = "soundSpectrogramMeta"
 )
+
+
+#' @importFrom methods setValidity
+#' @importFrom assertthat assert_that has_name
+setValidity(
+  "soundSpectrogram",
+  function(object){
+    assert_that(
+      nrow(object@Spectrogram) == 1
+    )
+
+    return(TRUE)
+  }
+)
