@@ -25,6 +25,7 @@ Collate:
     'next_power_2.R'
     'soundWavMeta-class.R'
     'soundSpectrogramMeta-class.R'
+    'soundPulse-class.R'
     'soundSpectrogram-class.R'
     'soundWav-class.R'
     'sound_wav.R'
