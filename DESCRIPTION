@@ -19,6 +19,8 @@ Imports:
   raster,
   signal,
   tuneR
+Suggests:
+  igraph
 Collate: 
     'extract_full_pulse.R'
     'import_S3_classes.R'

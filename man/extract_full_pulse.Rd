@@ -19,3 +19,12 @@ extract_full_pulse(spectrogram, threshold_amplitude = 10,
 \description{
 Extract full pulses of a spectrogram
 }
+\examples{
+wav <- sound_wav(
+  system.file("demo.wav", package = "soundcluster"),
+  te_factor = 10,
+  max_length = 0.1
+)
+spectrogram <- wav2spectrogram(wav)
+extract_full_pulse(spectrogram, min_peak_amplitude = 20, dimensions = 16)
+}

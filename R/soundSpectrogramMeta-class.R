@@ -22,7 +22,7 @@ setClass(
 )
 
 #' @importFrom methods setValidity
-#' @importFrom assertthat assert_that has_name
+#' @importFrom assertthat assert_that has_name noNA
 setValidity(
   "soundSpectrogramMeta",
   function(object){

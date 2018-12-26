@@ -5,7 +5,16 @@
 #' @param dimensions the number of rows and columns used to resample the shape. Must be a single number and a power of 2. Will be altered to the next power of 2.
 #' @export
 #' @importFrom assertthat assert_that is.number is.count
-#' @importFrom raster raster clump zonal extent crop xyFromCell xmin xmax ymin ymax cellStats resample
+#' @importFrom raster raster clump zonal extent crop xyFromCell xmin xmax ymin ymax cellStats resample colSums rowSums which.max as.matrix
+#' @importFrom digest sha1
+#' @examples
+#' wav <- sound_wav(
+#'   system.file("demo.wav", package = "soundcluster"),
+#'   te_factor = 10,
+#'   max_length = 0.1
+#' )
+#' spectrogram <- wav2spectrogram(wav)
+#' extract_full_pulse(spectrogram, min_peak_amplitude = 20, dimensions = 16)
 extract_full_pulse <- function(
   spectrogram,
   threshold_amplitude = 10,
@@ -42,7 +51,17 @@ extract_full_pulse <- function(
       unscaled <- crop(spectrogram_raster, local)
       scaled <- raster(ext = local, nrows = 32, ncols = 32, crs = NULL)
       local_peak <- xyFromCell(unscaled, which.max(unscaled))
+      fingerprint <- sha1(
+        list(
+          spectrogram = spectrogram@Spectrogram$fingerprint,
+          dimensions = dimensions,
+          peak_time = local_peak[, "x"],
+          peak_frequency = local_peak[, "y"],
+          select_amplitude = threshold_amplitude
+        )
+      )
       meta <- data.frame(
+        fingerprint = fingerprint,
         spectrogram = spectrogram@Spectrogram$fingerprint,
         peak_time = local_peak[, "x"],
         start_time = xmin(local),
@@ -61,5 +80,10 @@ extract_full_pulse <- function(
       return(meta)
     }
   ) -> pulses
-  do.call(rbind, pulses)
+  new(
+    "soundPulse",
+    Pulse = do.call(rbind, pulses),
+    Spectrogram = spectrogram@Spectrogram,
+    Recording = spectrogram@Recording
+  )
 }
