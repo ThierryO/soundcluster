@@ -19,7 +19,8 @@ Imports:
   methods,
   raster,
   signal,
-  tuneR
+  tuneR,
+  utils
 Suggests:
   igraph,
   littler
@@ -27,6 +28,7 @@ Collate:
     'extract_full_pulse.R'
     'import_S3_classes.R'
     'next_power_2.R'
+    'raw_pyramide.R'
     'rbind.R'
     'read_soundpulse.R'
     'soundWavMeta-class.R'
