@@ -34,5 +34,6 @@ Collate:
     'soundSpectrogram-class.R'
     'soundWav-class.R'
     'sound_wav.R'
+    'vif.R'
     'wav2rds.R'
     'wav2spectrogram.R'
