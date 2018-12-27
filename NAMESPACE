@@ -3,6 +3,7 @@
 S3method(rbind,soundPulse)
 export(extract_full_pulse)
 export(next_power_2)
+export(read_soundpulse)
 export(sound_wav)
 export(wav2rds)
 export(wav2spectrogram)

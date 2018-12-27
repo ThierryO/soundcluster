@@ -27,6 +27,7 @@ Collate:
     'import_S3_classes.R'
     'next_power_2.R'
     'rbind.R'
+    'read_soundpulse.R'
     'soundWavMeta-class.R'
     'soundSpectrogramMeta-class.R'
     'soundPulse-class.R'
