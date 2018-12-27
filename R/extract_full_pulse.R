@@ -40,9 +40,9 @@ extract_full_pulse <- function(
   names(spectrogram_raster) <- "dB"
 
   relevant <- clump(spectrogram_raster >= threshold_amplitude)
-  peak <- zonal(spectrogram_raster, relevant, max)
+  peak <- zonal(spectrogram_raster, relevant, "max")
   lapply(
-    peak[peak[, "value"] >= min_peak_amplitude, "zone"],
+    peak[peak[, "max"] >= min_peak_amplitude, "zone"],
     function(this_clump) {
       local <- relevant$clumps == this_clump
       cols <- range(which(colSums(local, na.rm = TRUE) > 0))

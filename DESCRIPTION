@@ -20,7 +20,8 @@ Imports:
   signal,
   tuneR
 Suggests:
-  igraph
+  igraph,
+  littler
 Collate: 
     'extract_full_pulse.R'
     'import_S3_classes.R'
@@ -31,4 +32,5 @@ Collate:
     'soundSpectrogram-class.R'
     'soundWav-class.R'
     'sound_wav.R'
+    'wav2rds.R'
     'wav2spectrogram.R'
