@@ -9,8 +9,8 @@ It holds metadata on recordings
 }
 \section{Slots}{
 
-  \describe{
-   \item{\code{Recording}}{A data.frame with id, fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-  }
+\describe{
+\item{\code{Recording}}{A data.frame with id, fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
+}
 }
 

@@ -9,10 +9,10 @@ Holds a spectrogram and it's metadata.
 }
 \section{Slots}{
 
-  \describe{
-   \item{\code{SpecGram}}{The actual spectrogram}
-   \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-   \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
-  }
+\describe{
+\item{\code{SpecGram}}{The actual spectrogram}
+\item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
+\item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
+}
 }
 

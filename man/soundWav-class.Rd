@@ -9,9 +9,9 @@ Holds the relevant content of wav files
 }
 \section{Slots}{
 
-  \describe{
-   \item{\code{Recording}}{The metadata on the recording}
-   \item{\code{Values}}{The actual recorded values}
-  }
+\describe{
+\item{\code{Recording}}{The metadata on the recording}
+\item{\code{Values}}{The actual recorded values}
+}
 }
 

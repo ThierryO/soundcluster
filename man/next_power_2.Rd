@@ -10,7 +10,7 @@ next_power_2(x)
 \item{x}{the number of which to calculate the next power of 2}
 }
 \description{
-Handles numeric of integer vector. `x` values smaller or equal than 1 return `NA`
+Handles numeric of integer vector. \code{x} values smaller or equal than 1 return \code{NA}
 }
 \examples{
 next_power_2(3)

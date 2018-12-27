@@ -14,9 +14,9 @@ wav2rds(path = ".", recursive = TRUE, threshold_amplitude = 10,
 
 \item{recursive}{logical.  Should the listing recurse into directories?}
 
-\item{threshold_amplitude}{relevant regions have an amplitude above the `threshold_amplitude`. Defaults to 10 dB.}
+\item{threshold_amplitude}{relevant regions have an amplitude above the \code{threshold_amplitude}. Defaults to 10 dB.}
 
-\item{min_peak_amplitude}{the maximum amplitude in a relevant region must be above `min_peak_amplitude`. Defaults to 30 dB.}
+\item{min_peak_amplitude}{the maximum amplitude in a relevant region must be above \code{min_peak_amplitude}. Defaults to 30 dB.}
 
 \item{dimensions}{the number of rows and columns used to resample the shape. Must be a single number and a power of 2. Will be altered to the next power of 2.}
 
