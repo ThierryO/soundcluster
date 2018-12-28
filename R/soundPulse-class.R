@@ -54,7 +54,7 @@ setValidity(
       inherits(object@Pulse$start_amplitude, "numeric"),
       inherits(object@Pulse$select_amplitude, "numeric"),
       inherits(object@Pulse$shape, "list"),
-      noNA(object@Spectrogram)
+      noNA(object@Pulse)
     )
     if (anyDuplicated(object@Pulse$fingerprint) > 0) {
       stop("Duplicated pulse fingerprint")

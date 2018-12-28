@@ -1,4 +1,4 @@
-#' Prepare a matrix of unscaled pulse parameters based on generic pulse properties and the pyramides of the shape
+#' Prepare apulse parameters based on generic pulse properties and the pyramides of the shape
 #'
 #' - `duration`: the length of the pulse in ms
 #' - `peak_time`: the relative position of the peak in the pulse
@@ -10,8 +10,9 @@
 #'
 #' @param sound_pulse a soundPulse object
 #' @importFrom assertthat assert_that
+#' @importFrom stats sd
 #' @export
-raw_pyramide <- function(sound_pulse) {
+sound_pyramide <- function(sound_pulse) {
   assert_that(inherits(sound_pulse, "soundPulse"))
 
   pulse <- sound_pulse@Pulse
@@ -27,8 +28,22 @@ raw_pyramide <- function(sound_pulse) {
   cd[, "start_frequency"] <- cd[, "start_frequency"] / cd[, "frequency_range"]
   depth <- pmax(0, floor(log(nrow(cd) / 20 - ncol(cd) - 1, base = 4)))
   cd <- cbind(cd, t(sapply(sound_pulse@Pulse$shape, pyramide, depth = depth)))
+
+  scaling <- cbind(
+    center = colMeans(cd),
+    sd = apply(cd, 2, sd)
+  )
+  cd <- apply(cd, 2, scale, center = TRUE, scale = TRUE)
   rownames(cd) <- pulse$fingerprint
-  return(cd)
+
+  new(
+    "soundPyramide",
+    Pyramide = cd,
+    Pulse = pulse[, c("fingerprint", "spectrogram")],
+    Scaling = scaling,
+    Spectrogram = sound_pulse@Spectrogram,
+    Recording = sound_pulse@Recording
+  )
 }
 
 #' create a vector of pyramide values
