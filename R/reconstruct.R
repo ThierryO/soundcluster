@@ -80,8 +80,8 @@ reconstruct.soundPulse <- function(x, ..., spectrogram) {
 #' @importFrom methods validObject
 reconstruct.soundPyramide <- function(x, ...) {
   validObject(x)
-  cols <- colnames(x@Pyramide)
-  rescaled <- t(x@Pyramide) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
+  cols <- colnames(x@Pyramid)
+  rescaled <- t(x@Pyramid) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
   pulse <- data.frame(
     peak_amplitude = rescaled["peak_amplitude", ],
     start_amplitude = 10,
@@ -96,13 +96,13 @@ reconstruct.soundPyramide <- function(x, ...) {
   pulse$shape <- lapply(
     seq_len(nrow(relevant)),
     function(i) {
-      pyramide2shape(relevant[i, ])
+      pyramid2shape(relevant[i, ])
     }
   )
   pulse <- reconstruct(pulse)
 }
 
-pyramide2shape <- function(z) {
+pyramid2shape <- function(z) {
   grand_mean <- z[grep("^P[0]*$", names(z))]
   s0 <- z[grep("^P[0-3]*0$", names(z))]
   s1 <- z[grep("^P[0-3]*1$", names(z))]
@@ -118,8 +118,8 @@ pyramide2shape <- function(z) {
   s0[1] <- 4 * grand_mean - s1[1] - s2[1] - s3[1]
   if (length(s0) > 1) {
     cbind(
-      rbind(pyramide2shape(s0), pyramide2shape(s1)),
-      rbind(pyramide2shape(s2), pyramide2shape(s3))
+      rbind(pyramid2shape(s0), pyramid2shape(s1)),
+      rbind(pyramid2shape(s2), pyramid2shape(s3))
     )
   } else {
     matrix(c(s0, s1, s2, s3), ncol = 2)

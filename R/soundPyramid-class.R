@@ -1,26 +1,26 @@
-#' The soundPyramide class
+#' The soundPyramid class
 #'
-#' Holds pyramides of pulses and their metadata.
+#' Holds pyramids of pulses and their metadata.
 #' @section Slots:
 #' \describe{
 #'   \item{\code{Pulse}}{A data.frame with `fingerprint` and its `spectrogram`}
-#'   \item{\code{Pyramide}}{A matrix with pyramide values}
-#'   \item{\code{Scaling}}{A matrix with `center` and `sd` for used to center each variable in `Pyramide`}
+#'   \item{\code{Pyramid}}{A matrix with pyramid values}
+#'   \item{\code{Scaling}}{A matrix with `center` and `sd` for used to center each variable in `Pyramid`}
 #'   \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
 #'   \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
 #' }
-#' @name soundPyramide-class
-#' @rdname soundPyramide-class
-#' @exportClass soundPyramide
-#' @aliases soundPyramide-class
+#' @name soundPyramid-class
+#' @rdname soundPyramid-class
+#' @exportClass soundPyramid
+#' @aliases soundPyramid-class
 #' @importFrom methods setClass
 #' @docType class
 #' @include soundSpectrogramMeta-class.R
 setClass(
-  "soundPyramide",
+  "soundPyramid",
   representation = representation(
     Pulse = "data.frame",
-    Pyramide = "matrix",
+    Pyramid = "matrix",
     Scaling = "matrix"
   ),
   contains = "soundSpectrogramMeta"
@@ -29,24 +29,24 @@ setClass(
 #' @importFrom methods setValidity
 #' @importFrom assertthat assert_that has_name noNA
 setValidity(
-  "soundPyramide",
+  "soundPyramid",
   function(object){
     assert_that(
       all(
         c(
           "duration", "peak_time", "peak_frequency", "start_frequency",
-          "frequency_range", "peak_amplitude"
+          "frequency_range", "peak_amplitude", "amplitude_range"
         ) %in%
-          colnames(object@Pyramide)
+          colnames(object@Pyramid)
       ),
-      is.numeric(object@Pyramide),
-      noNA(object@Pyramide)
+      is.numeric(object@Pyramid),
+      noNA(object@Pyramid)
     )
 
     assert_that(
       has_name(object@Pulse, "fingerprint"),
       has_name(object@Pulse, "spectrogram"),
-      all(object@Pulse$fingerprint %in% rownames(object@Pyramide)),
+      all(object@Pulse$fingerprint %in% rownames(object@Pyramid)),
       all(object@Pulse$spectrogram %in% object@Spectrogram$fingerprint)
     )
 
@@ -54,7 +54,7 @@ setValidity(
       is.numeric(object@Scaling),
       noNA(object@Scaling),
       all(c("center", "sd") %in% colnames(object@Scaling)),
-      all(colnames(object@Pyramide) %in% rownames(object@Scaling)),
+      all(colnames(object@Pyramid) %in% rownames(object@Scaling)),
       object@Scaling["duration", "center"] > 0,
       object@Scaling["peak_time", "center"] >= 0,
       object@Scaling["peak_time", "center"] <= 1,
