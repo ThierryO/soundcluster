@@ -4,10 +4,12 @@
 \alias{sound_pyramid}
 \title{Prepare apulse parameters based on generic pulse properties and the pyramids of the shape}
 \usage{
-sound_pyramid(sound_pulse)
+sound_pyramid(sound_pulse, end_frequency = c(10, Inf))
 }
 \arguments{
 \item{sound_pulse}{a soundPulse object}
+
+\item{end_frequency}{a vector of length 2 defining the lower and upper boundary for the end frequency of relevant pulses}
 }
 \description{
 \itemize{

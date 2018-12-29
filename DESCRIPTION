@@ -18,6 +18,7 @@ Imports:
   digest,
   kohonen,
   methods,
+  parallel,
   raster,
   signal,
   tuneR,

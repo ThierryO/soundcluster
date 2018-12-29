@@ -9,13 +9,25 @@
 #' - `PXXXX`: a set of pyramid values describing the shape of the pulse. The number of pyramid values depends on the total number of pulses and the dimensions of the shape
 #'
 #' @param sound_pulse a soundPulse object
+#' @param end_frequency a vector of length 2 defining the lower and upper boundary for the end frequency of relevant pulses
 #' @importFrom assertthat assert_that
+#' @importFrom methods validObject
+#' @importFrom parallel mclapply detectCores
 #' @importFrom stats sd
 #' @export
-sound_pyramid <- function(sound_pulse) {
-  assert_that(inherits(sound_pulse, "soundPulse"))
+sound_pyramid <- function(sound_pulse, end_frequency = c(10, Inf)) {
+  assert_that(
+    inherits(sound_pulse, "soundPulse"),
+    is.numeric(end_frequency),
+    length(end_frequency) == 2
+  )
+  validObject(sound_pulse)
 
   pulse <- sound_pulse@Pulse
+  relevant <-
+    min(end_frequency) <= pulse$end_frequency &
+    pulse$end_frequency <= max(end_frequency)
+  pulse <- pulse[relevant, ]
   cd <- cbind(
     duration = pulse$end_time - pulse$start_time,
     peak_time = pulse$peak_time - pulse$start_time,
@@ -28,7 +40,13 @@ sound_pyramid <- function(sound_pulse) {
   cd[, "peak_time"] <- cd[, "peak_time"] / cd[, "duration"]
   cd[, "start_frequency"] <- cd[, "start_frequency"] / cd[, "frequency_range"]
   depth <- pmax(0, floor(log(nrow(cd) / 10 - ncol(cd) - 1, base = 4)))
-  cd <- cbind(cd, t(sapply(sound_pulse@Pulse$shape, pyramid, depth = depth)))
+  p <- mclapply(
+    X = sound_pulse@Pulse$shape[relevant],
+    FUN = pyramid,
+    depth = depth,
+    mc.cores = detectCores()
+  )
+  cd <- cbind(cd, do.call(rbind, p))
 
   scaling <- cbind(
     center = colMeans(cd),
