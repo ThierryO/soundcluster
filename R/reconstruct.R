@@ -16,8 +16,8 @@ reconstruct.list <- function(x, ...) {
     ymn = x$start_frequency, ymx = x$end_frequency
   )
   target <- raster(
-    ncols = 2 * (ceiling(x$end_time) - floor(x$start_time)),
-    nrows = 2 * (ceiling(x$end_frequency) - floor(x$start_frequency)),
+    ncols = 4 * (ceiling(x$end_time) - floor(x$start_time)),
+    nrows = 4 * (ceiling(x$end_frequency) - floor(x$start_frequency)),
     xmn = floor(x$start_time), xmx = ceiling(x$end_time),
     ymn = floor(x$start_frequency), ymx = ceiling(x$end_frequency),
     crs = NA

@@ -31,6 +31,7 @@ Collate:
     'extract_full_pulse.R'
     'import_S3_classes.R'
     'next_power_2.R'
+    'plot_soundCluster.R'
     'rbind.R'
     'read_soundpulse.R'
     'reconstruct.R'
