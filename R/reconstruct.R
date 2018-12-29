@@ -84,7 +84,8 @@ reconstruct.soundPyramide <- function(x, ...) {
   rescaled <- t(x@Pyramid) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
   pulse <- data.frame(
     peak_amplitude = rescaled["peak_amplitude", ],
-    start_amplitude = 10,
+    start_amplitude = rescaled["peak_amplitude", ] -
+      rescaled["amplitude_range", ],
     start_time = 0,
     end_time = rescaled["duration", ],
     start_frequency = rescaled["peak_frequency", ] -
@@ -99,7 +100,7 @@ reconstruct.soundPyramide <- function(x, ...) {
       pyramid2shape(relevant[i, ])
     }
   )
-  pulse <- reconstruct(pulse)
+  reconstruct(pulse)
 }
 
 pyramid2shape <- function(z) {
@@ -124,4 +125,33 @@ pyramid2shape <- function(z) {
   } else {
     matrix(c(s0, s1, s2, s3), ncol = 2)
   }
+}
+
+#' @rdname reconstruct
+#' @export
+#' @importFrom methods validObject
+reconstruct.soundCluster <- function(x, ...) {
+  validObject(x)
+  z <- x@Network$codes[[1]]
+  cols <- colnames(z)
+  rescaled <- t(z) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
+  pulse <- data.frame(
+    peak_amplitude = rescaled["peak_amplitude", ],
+    start_amplitude = rescaled["peak_amplitude", ] -
+      rescaled["amplitude_range", ],
+    start_time = 0,
+    end_time = rescaled["duration", ],
+    start_frequency = rescaled["peak_frequency", ] -
+      rescaled["start_frequency", ] * rescaled["frequency_range", ],
+    end_frequency = rescaled["peak_frequency", ] +
+      (1 - rescaled["start_frequency", ]) * rescaled["frequency_range", ]
+  )
+  relevant <- t(rescaled[grep("^P[0-3]*$", cols), ])
+  pulse$shape <- lapply(
+    seq_len(nrow(relevant)),
+    function(i) {
+      pyramid2shape(relevant[i, ])
+    }
+  )
+  reconstruct(pulse)
 }

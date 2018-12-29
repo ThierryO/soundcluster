@@ -16,6 +16,7 @@ Roxygen: list(markdown = TRUE)
 Imports:
   assertthat,
   digest,
+  kohonen,
   methods,
   raster,
   signal,
@@ -25,12 +26,14 @@ Suggests:
   igraph,
   littler
 Collate: 
+    'cluster.R'
     'extract_full_pulse.R'
     'import_S3_classes.R'
     'next_power_2.R'
     'rbind.R'
     'read_soundpulse.R'
     'reconstruct.R'
+    'soundCluster-class.R'
     'soundWavMeta-class.R'
     'soundSpectrogramMeta-class.R'
     'soundPulse-class.R'

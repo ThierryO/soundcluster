@@ -6,6 +6,7 @@
 \alias{reconstruct.data.frame}
 \alias{reconstruct.soundPulse}
 \alias{reconstruct.soundPyramide}
+\alias{reconstruct.soundCluster}
 \title{Reconstruct pulses}
 \usage{
 reconstruct(x, ...)
@@ -17,6 +18,8 @@ reconstruct(x, ...)
 \method{reconstruct}{soundPulse}(x, ..., spectrogram)
 
 \method{reconstruct}{soundPyramide}(x, ...)
+
+\method{reconstruct}{soundCluster}(x, ...)
 }
 \arguments{
 \item{x}{the object to reconstruct the pulse}

@@ -63,6 +63,7 @@ setValidity(
       object@Scaling["start_frequency", "center"] <= 1,
       object@Scaling["frequency_range", "center"] > 0,
       object@Scaling["peak_amplitude", "center"] > 0,
+      object@Scaling["amplitude_range", "center"] > 0,
       all(object@Scaling[, "sd"] > 0)
     )
 
