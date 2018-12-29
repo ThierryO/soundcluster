@@ -6,31 +6,34 @@
 #' @export
 rbind.soundPulse <- function(..., deparse.level = 1) {
   dots <- list(...)
+  pulse <- do.call(
+    rbind,
+    c(
+      lapply(dots, slot, "Pulse"),
+      make.row.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  )
+  spectrogram <- do.call(
+    rbind,
+    c(
+      lapply(dots, slot, "Spectrogram"),
+      make.row.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  )
+  recording <- do.call(
+    rbind,
+    c(
+      lapply(dots, slot, "Recording"),
+      make.row.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  )
   new(
     "soundPulse",
-    Pulse = do.call(
-      rbind,
-      c(
-        lapply(dots, slot, "Pulse"),
-        make.row.names = FALSE,
-        stringsAsFactors = FALSE
-      )
-    ),
-    Spectrogram = do.call(
-      rbind,
-      c(
-        lapply(dots, slot, "Spectrogram"),
-        make.row.names = FALSE,
-        stringsAsFactors = FALSE
-      )
-    ),
-    Recording = do.call(
-      rbind,
-      c(
-        lapply(dots, slot, "Recording"),
-        make.row.names = FALSE,
-        stringsAsFactors = FALSE
-      )
-    )
+    Pulse = unique(pulse),
+    Spectrogram = unique(spectrogram),
+    Recording = unique(recording)
   )
 }
