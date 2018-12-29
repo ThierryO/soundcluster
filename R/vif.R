@@ -13,7 +13,7 @@ vif <- function(x) {
   vif_score <- sapply(
     colnames(x),
     function(variable) {
-      model <- lm(as.formula(paste(variable, "~.")), data = x)
+      model <- lm(as.formula(paste(variable, " ~ .")), data = x)
       1 / (1 - summary(model)$r.squared)
     }
   )

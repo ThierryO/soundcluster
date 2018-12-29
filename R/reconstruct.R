@@ -59,10 +59,6 @@ reconstruct.soundPulse <- function(x, ..., spectrogram) {
   validObject(x)
   assert_that(is.string(spectrogram))
   relevant <- x@Pulse[x@Pulse$spectrogram == spectrogram, ]
-  start_time <- floor(min(relevant$start_time))
-  end_time <- ceiling(max(relevant$end_time))
-  start_frequency <- floor(min(relevant$start_frequency))
-  end_frequency <- ceiling(max(relevant$end_frequency))
   pulse <- reconstruct(relevant)
   while (length(pulse) > 1) {
     half <- floor(length(pulse) / 2)
