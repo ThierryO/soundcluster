@@ -6,7 +6,7 @@
 \usage{
 wav2rds(path = ".", recursive = TRUE, existing = c("skip", "append",
   "overwrite"), threshold_amplitude = 10, min_peak_amplitude = 30,
-  dimensions = 64, channel = c("left", "right"), te_factor = 1,
+  dimensions = 32, channel = c("left", "right"), te_factor = 1,
   max_length = 5, window_ms = 1, overlap = 0.9)
 }
 \arguments{

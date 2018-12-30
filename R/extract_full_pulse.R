@@ -47,10 +47,13 @@ extract_full_pulse <- function(
       local <- relevant$clumps == this_clump
       cols <- range(which(colSums(local, na.rm = TRUE) > 0))
       rows <- range(which(rowSums(local, na.rm = TRUE) > 0))
-      local <- extent(local, rows[1], rows[2], cols[1], cols[2])
-      unscaled <- crop(spectrogram_raster, local)
-      scaled <- raster(ext = local, nrows = 32, ncols = 32, crs = NULL)
-      local_peak <- xyFromCell(unscaled, which.max(unscaled))
+      local_ext <- extent(local, rows[1], rows[2], cols[1], cols[2])
+      clump <- crop(local, local_ext)
+      unscaled <- crop(spectrogram_raster, local_ext)
+      scaled <- raster(
+        ext = local_ext, nrows = dimensions, ncols = dimensions, crs = NULL
+      )
+      local_peak <- xyFromCell(unscaled, which.max(clump * unscaled))
       fingerprint <- sha1(
         list(
           spectrogram = spectrogram@Spectrogram$fingerprint,
@@ -80,10 +83,15 @@ extract_full_pulse <- function(
       return(meta)
     }
   ) -> pulses
+  pulses <- do.call(rbind, pulses)
+  sp <- spectrogram@Spectrogram
+  sp <- sp[sp$fingerprint %in% pulses$spectrogram, ]
+  rec <- spectrogram@Recording
+  rec <- rec[rec$fingerprint %in% sp$recording, ]
   new(
     "soundPulse",
-    Pulse = do.call(rbind, pulses),
-    Spectrogram = spectrogram@Spectrogram,
-    Recording = spectrogram@Recording
+    Pulse = pulses,
+    Spectrogram = sp,
+    Recording = rec
   )
 }

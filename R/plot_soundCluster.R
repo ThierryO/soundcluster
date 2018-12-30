@@ -4,10 +4,12 @@
 #' @param x a soundCluster object
 #' @param y currently ignored
 #' @param ... currently ignored
+#' @method plot soundCluster
 #' @export
 #' @importFrom utils browseURL
 #' @importFrom grDevices pdf dev.off
 #' @importFrom graphics par plot
+#' @importMethodsFrom raster plot
 plot.soundCluster <- function(x, y, ...) {
   validObject(x)
 

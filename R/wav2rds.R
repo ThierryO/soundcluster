@@ -16,7 +16,7 @@ wav2rds <- function(
   existing = c("skip", "append", "overwrite"),
   threshold_amplitude = 10,
   min_peak_amplitude = 30,
-  dimensions = 64,
+  dimensions = 32,
   channel = c("left", "right"),
   te_factor = 1,
   max_length = 5,

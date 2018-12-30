@@ -39,9 +39,15 @@ sound_pyramid <- function(sound_pulse, end_frequency = c(10, Inf)) {
   )
   cd[, "peak_time"] <- cd[, "peak_time"] / cd[, "duration"]
   cd[, "start_frequency"] <- cd[, "start_frequency"] / cd[, "frequency_range"]
-  depth <- pmax(0, floor(log(nrow(cd) / 10 - ncol(cd) - 1, base = 4)))
+  depth <- pmax(
+    0,
+    pmin(
+      log2(min(sapply(pulse$shape, ncol))),
+      floor(log(nrow(cd) / 10 - ncol(cd) - 1, base = 4))
+    )
+  )
   p <- mclapply(
-    X = sound_pulse@Pulse$shape[relevant],
+    X = pulse$shape,
     FUN = pyramid,
     depth = depth,
     mc.cores = detectCores()
