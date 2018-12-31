@@ -22,6 +22,9 @@ cluster <- function(x, n_class = 49) {
   new(
     "soundCluster",
     Network = som(x@Pyramid, grid = sg, rlen = 100, mode = "pbatch"),
-    Scaling = x@Scaling
+    Scaling = x@Scaling,
+    Pulse = x@Pulse,
+    Recording = x@Recording,
+    Spectrogram = x@Spectrogram
   )
 }
