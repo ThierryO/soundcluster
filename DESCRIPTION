@@ -40,6 +40,7 @@ Collate:
     'soundWavMeta-class.R'
     'soundSpectrogramMeta-class.R'
     'soundCluster-class.R'
+    'soundDatabase-class.R'
     'soundPulse-class.R'
     'soundPyramid-class.R'
     'soundSpectrogram-class.R'

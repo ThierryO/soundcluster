@@ -16,7 +16,7 @@ connect_db <- function(path = ".") {
   connection <- dbConnect(SQLite(), dbname = db)
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS main.device (
+    "CREATE TABLE IF NOT EXISTS device (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       make TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -29,7 +29,7 @@ connect_db <- function(path = ".") {
   dbClearResult(res)
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS main.recording (
+    "CREATE TABLE IF NOT EXISTS recording (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       timestamp INTEGER NOT NULL,
@@ -39,7 +39,7 @@ connect_db <- function(path = ".") {
   dbClearResult(res)
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS main.spectrogram (
+    "CREATE TABLE IF NOT EXISTS spectrogram (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       recording INTEGER NOT NULL REFERENCES recording (id),
@@ -51,7 +51,7 @@ connect_db <- function(path = ".") {
   dbClearResult(res)
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS main.pulse (
+    "CREATE TABLE IF NOT EXISTS pulse (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       spectrogram INTEGER NOT NULL REFERENCES spectrogram (id),
@@ -69,14 +69,14 @@ connect_db <- function(path = ".") {
   dbClearResult(res)
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS main.pyramid (
+    "CREATE TABLE IF NOT EXISTS pyramid (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pulse INTEGER NOT NULL REFERENCES pulse (id),
       parent INTEGER REFERENCES pyramide (id),
-      quandrant INTEGER NOT NULL,
+      quadrant INTEGER NOT NULL,
       value REAL NOT NULL
     )"
   )
   dbClearResult(res)
-  return(connection)
+  new("soundDatabase", Connection = connection)
 }
