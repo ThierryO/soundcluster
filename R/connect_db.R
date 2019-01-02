@@ -14,6 +14,7 @@ connect_db <- function(path = ".") {
 
   db <- file.path(path, "soundcluster.sqlite")
   connection <- dbConnect(SQLite(), dbname = db)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS device (
@@ -27,16 +28,19 @@ connect_db <- function(path = ".") {
     )"
   )
   dbClearResult(res)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS recording (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       timestamp INTEGER NOT NULL,
-      device INTEGER NOT NULL REFERENCES device (id)
+      device INTEGER NOT NULL REFERENCES device (id),
+      filename TEXT
     )"
   )
   dbClearResult(res)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS spectrogram (
@@ -49,6 +53,7 @@ connect_db <- function(path = ".") {
     )"
   )
   dbClearResult(res)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS pulse (
@@ -67,16 +72,16 @@ connect_db <- function(path = ".") {
     )"
   )
   dbClearResult(res)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS pyramid (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
       pulse INTEGER NOT NULL REFERENCES pulse (id),
-      parent INTEGER REFERENCES pyramide (id),
-      quadrant INTEGER NOT NULL,
+      quadrant integer NOT NULL,
       value REAL NOT NULL
     )"
   )
   dbClearResult(res)
+
   new("soundDatabase", Connection = connection)
 }

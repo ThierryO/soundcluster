@@ -48,5 +48,6 @@ Collate:
     'sound_pyramid.R'
     'sound_wav.R'
     'vif.R'
+    'wav2db.R'
     'wav2rds.R'
     'wav2spectrogram.R'

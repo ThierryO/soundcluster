@@ -41,12 +41,8 @@ setValidity(
           dbListFields(object@Connection, "pulse")
       ),
       all(
-        c("id", "pulse", "parent", "quadrant", "value") %in%
+        c("pulse", "quadrant", "value") %in%
           dbListFields(object@Connection, "pyramid")
-      ),
-      all(
-        c("id", "fingerprint", "timestamp", "device") %in%
-          dbListFields(object@Connection, "recording")
       ),
       all(
         c("id", "fingerprint", "recording", "window_ms", "window_n",
