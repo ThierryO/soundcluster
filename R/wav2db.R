@@ -13,7 +13,7 @@
 #' @importFrom assertthat assert_that is.string is.flag noNA
 #' @importFrom utils file_test flush.console
 #' @importFrom parallel mclapply detectCores
-#' @importFrom RSQLite dbQuoteString dbGetQuery dbWriteTable dbSendQuery dbClearResult dbRemoveTable
+#' @importFrom RSQLite dbQuoteString dbGetQuery dbWriteTable dbSendQuery dbClearResult dbRemoveTable dbQuoteLiteral
 wav2db <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
@@ -35,6 +35,37 @@ wav2db <- function(
   if (file_test("-f", path)) {
     message(path)
     flush.console()
+    available <- dbGetQuery(
+      db@Connection,
+      sprintf(
+        "SELECT
+          r.fingerprint, r.timestamp,
+          d.serial, d.sample_rate,
+          s.window_ms
+        FROM  device AS d
+        INNER JOIN recording AS r ON r.device = d.id
+        INNER JOIN spectrogram AS s ON s.recording = r.id
+        INNER JOIN pulse AS p ON p.spectrogram = s.id
+        WHERE r.filename = %s AND
+          d.make = %s AND d.model = %s AND d.te_factor = %s AND
+          s.window_ms = %s AND s.overlap = %s AND
+          p.select_amplitude = %s AND
+          p.peak_amplitude >= %s
+        GROUP BY
+          r.fingerprint, r.timestamp, d.serial, d.sample_rate, s.window_ms",
+        dbQuoteString(db@Connection, path),
+        dbQuoteString(db@Connection, make),
+        dbQuoteString(db@Connection, model),
+        dbQuoteLiteral(db@Connection, te_factor),
+        dbQuoteLiteral(db@Connection, window_ms),
+        dbQuoteLiteral(db@Connection, overlap),
+        dbQuoteLiteral(db@Connection, threshold_amplitude),
+        dbQuoteLiteral(db@Connection, min_peak_amplitude)
+      )
+    )
+    if (nrow(available) > 0 && isTRUE(all.equal(serial, available$serial))) {
+      return(TRUE)
+    }
     wav <- sound_wav(
       filename = path,
       channel = channel,
@@ -188,7 +219,7 @@ wav2db <- function(
     full.names = TRUE
   )
   lapply(
-    wavs,
+    sample(wavs),
     wav2db,
     db = db,
     make = make,
