@@ -20,6 +20,7 @@ setClass(
   "soundPyramid",
   representation = representation(
     Pulse = "data.frame",
+    PulseMeta = "matrix",
     Pyramid = "matrix",
     Scaling = "matrix"
   ),
@@ -35,18 +36,21 @@ setValidity(
       all(
         c(
           "duration", "peak_time", "peak_frequency", "start_frequency",
-          "frequency_range", "peak_amplitude", "amplitude_range"
+          "frequency_range", "peak_amplitude"
         ) %in%
-          colnames(object@Pyramid)
+          colnames(object@PulseMeta)
       ),
+      is.numeric(object@PulseMeta),
+      noNA(object@PulseMeta),
       is.numeric(object@Pyramid),
-      noNA(object@Pyramid)
+      noNA(object@Pyramid),
+      isTRUE(all.equal(rownames(object@Pyramid), rownames(object@PulseMeta)))
     )
 
     assert_that(
       has_name(object@Pulse, "fingerprint"),
       has_name(object@Pulse, "spectrogram"),
-      all(object@Pulse$fingerprint %in% rownames(object@Pyramid)),
+      all(object@Pulse$fingerprint %in% rownames(object@PulseMeta)),
       all(object@Pulse$spectrogram %in% object@Spectrogram$fingerprint)
     )
 
@@ -55,6 +59,7 @@ setValidity(
       noNA(object@Scaling),
       all(c("center", "sd") %in% colnames(object@Scaling)),
       all(colnames(object@Pyramid) %in% rownames(object@Scaling)),
+      all(colnames(object@PulseMeta) %in% rownames(object@Scaling)),
       object@Scaling["duration", "center"] > 0,
       object@Scaling["peak_time", "center"] >= 0,
       object@Scaling["peak_time", "center"] <= 1,
@@ -63,7 +68,6 @@ setValidity(
       object@Scaling["start_frequency", "center"] <= 1,
       object@Scaling["frequency_range", "center"] > 0,
       object@Scaling["peak_amplitude", "center"] > 0,
-      object@Scaling["amplitude_range", "center"] > 0,
       all(object@Scaling[, "sd"] > 0)
     )
 

@@ -5,7 +5,7 @@
 \alias{reconstruct.list}
 \alias{reconstruct.data.frame}
 \alias{reconstruct.soundPulse}
-\alias{reconstruct.soundPyramide}
+\alias{reconstruct.soundPyramid}
 \alias{reconstruct.soundCluster}
 \title{Reconstruct pulses}
 \usage{
@@ -17,7 +17,7 @@ reconstruct(x, ...)
 
 \method{reconstruct}{soundPulse}(x, ..., spectrogram)
 
-\method{reconstruct}{soundPyramide}(x, ...)
+\method{reconstruct}{soundPyramid}(x, ...)
 
 \method{reconstruct}{soundCluster}(x, ...)
 }

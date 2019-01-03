@@ -74,10 +74,10 @@ reconstruct.soundPulse <- function(x, ..., spectrogram) {
 #' @rdname reconstruct
 #' @export
 #' @importFrom methods validObject
-reconstruct.soundPyramide <- function(x, ...) {
+reconstruct.soundPyramid <- function(x, ...) {
   validObject(x)
-  cols <- colnames(x@Pyramid)
-  rescaled <- t(x@Pyramid) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
+  cols <- colnames(x@PulseMeta)
+  rescaled <- t(x@PulseMeta) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
   pulse <- data.frame(
     peak_amplitude = rescaled["peak_amplitude", ],
     start_amplitude = rescaled["peak_amplitude", ] -
@@ -89,26 +89,28 @@ reconstruct.soundPyramide <- function(x, ...) {
     end_frequency = rescaled["peak_frequency", ] +
       (1 - rescaled["start_frequency", ]) * rescaled["frequency_range", ]
   )
-  relevant <- t(rescaled[grep("^P[0-3]*$", cols), ])
+  cols <- colnames(x@Pyramid)
+  rescaled <- t(x@Pyramid) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
   pulse$shape <- lapply(
-    seq_len(nrow(relevant)),
+    seq_len(ncol(rescaled)),
     function(i) {
-      pyramid2shape(relevant[i, ])
+      pyramid2shape(rescaled[, i])
     }
   )
   reconstruct(pulse)
 }
 
 pyramid2shape <- function(z) {
-  grand_mean <- z[grep("^P[0]*$", names(z))]
-  s0 <- z[grep("^P[0-3]*0$", names(z))]
-  s1 <- z[grep("^P[0-3]*1$", names(z))]
-  s2 <- z[grep("^P[0-3]*2$", names(z))]
-  s3 <- z[grep("^P[0-3]*3$", names(z))]
-  names(s0) <- substr(names(s0), 1, nchar(names(s0)) - 1)
-  names(s1) <- substr(names(s0), 1, nchar(names(s1)) - 1)
-  names(s2) <- substr(names(s0), 1, nchar(names(s2)) - 1)
-  names(s3) <- substr(names(s0), 1, nchar(names(s3)) - 1)
+  index <- as.integer(gsub("Q", "", names(z)))
+  grand_mean <- z[index == 0]
+  s0 <- z[index %% 4 == 0]
+  s1 <- z[index %% 4 == 1]
+  s2 <- z[index %% 4 == 2]
+  s3 <- z[index %% 4 == 3]
+  names(s0) <- paste0("Q", index[index %% 4 == 0] %/% 4)
+  names(s1) <- paste0("Q", index[index %% 4 == 1] %/% 4)
+  names(s2) <- paste0("Q", index[index %% 4 == 2] %/% 4)
+  names(s3) <- paste0("Q", index[index %% 4 == 3] %/% 4)
   s1[1] <- grand_mean + s1[1]
   s2[1] <- grand_mean + s2[1]
   s3[1] <- grand_mean + s3[1]
