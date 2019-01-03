@@ -38,14 +38,12 @@ wav2spectrogram <- function(wav, window_ms = 1, overlap = 0.9){
     list(
       recording = wav@Recording$fingerprint,
       window_ms = window_ms,
-      window_n = window_n,
       overlap = overlap
     )
   )
   spectrogram_meta <- data.frame(
     fingerprint = fingerprint,
     window_ms = window_ms,
-    window_n = window_n,
     overlap = overlap,
     recording = wav@Recording$fingerprint,
     stringsAsFactors = FALSE

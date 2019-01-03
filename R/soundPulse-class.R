@@ -5,7 +5,7 @@
 #'   \describe{
 #'    \item{\code{Pulse}}{A data.frame with fingerprint, spectrogram, peak_time, start_time, end_time, peak_frequency, start_frequency, end_frequency, peak_amplitude, start_amplitude, select_amplitude and shape}
 #'    \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-#'    \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
+#'    \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, overlap, recording}
 #'   }
 #' @name soundPulse-class
 #' @rdname soundPulse-class

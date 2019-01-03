@@ -14,7 +14,7 @@ Holds a cluster model.
 \item{\code{Pulse}}{A data.frame with \code{fingerprint} and its \code{spectrogram}}
 \item{\code{Scaling}}{A matrix with \code{center} and \code{sd} for used to center each variable in \code{Pyramid}}
 \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-\item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
+\item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, overlap, recording}
 }
 }
 

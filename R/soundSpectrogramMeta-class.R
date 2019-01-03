@@ -4,7 +4,7 @@
 #' @section Slots:
 #'   \describe{
 #'    \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-#'    \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
+#'    \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, overlap, recording}
 #'   }
 #' @name soundSpectrogramMeta-class
 #' @rdname soundSpectrogramMeta-class
@@ -29,14 +29,12 @@ setValidity(
     assert_that(
       has_name(object@Spectrogram, "fingerprint"),
       has_name(object@Spectrogram, "window_ms"),
-      has_name(object@Spectrogram, "window_n"),
       has_name(object@Spectrogram, "overlap"),
       has_name(object@Spectrogram, "recording")
     )
     assert_that(
       inherits(object@Spectrogram$fingerprint, "character"),
       inherits(object@Spectrogram$window_ms, "numeric"),
-      inherits(object@Spectrogram$window_n, "numeric"),
       inherits(object@Spectrogram$overlap, "numeric"),
       inherits(object@Spectrogram$recording, "character"),
       noNA(object@Spectrogram)
@@ -46,9 +44,6 @@ setValidity(
     }
     if (any(object@Spectrogram$window_ms <= 0)) {
       stop("spectrogram windows_ms must be strict positive")
-    }
-    if (any(object@Spectrogram$window_n <= 0)) {
-      stop("spectrogram windows_n must be strict positive")
     }
     if (any(object@Spectrogram$overlap <= 0)) {
       stop("spectrogram overlap must be strict positive")

@@ -50,8 +50,7 @@ setValidity(
           dbListFields(object@Connection, "recording")
       ),
       all(
-        c("id", "fingerprint", "recording", "window_ms", "window_n",
-          "overlap") %in%
+        c("id", "fingerprint", "recording", "window_ms", "overlap") %in%
           dbListFields(object@Connection, "spectrogram")
       )
     )

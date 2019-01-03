@@ -161,7 +161,6 @@ wav2db <- function(
         fingerprint = pulses@Spectrogram$fingerprint,
         recording = recording_id$id,
         window_ms = window_ms,
-        window_n = pulses@Spectrogram$window_n,
         overlap = overlap,
         stringsAsFactors = FALSE
       ),

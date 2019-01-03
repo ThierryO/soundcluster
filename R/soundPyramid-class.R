@@ -7,7 +7,7 @@
 #'   \item{\code{Pyramid}}{A matrix with pyramid values}
 #'   \item{\code{Scaling}}{A matrix with `center` and `sd` for used to center each variable in `Pyramid`}
 #'   \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
-#'   \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, window_n, overlap, recording}
+#'   \item{\code{Spectrogram}}{A data.frame with fingerprint, window_ms, overlap, recording}
 #' }
 #' @name soundPyramid-class
 #' @rdname soundPyramid-class
