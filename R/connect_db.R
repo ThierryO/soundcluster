@@ -35,6 +35,8 @@ connect_db <- function(path = ".") {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       timestamp INTEGER NOT NULL,
+      duration REAL NOT NULL,
+      total_duration REAL NOT NULL,
       device INTEGER NOT NULL REFERENCES device (id),
       filename TEXT
     )"

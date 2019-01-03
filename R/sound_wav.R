@@ -64,6 +64,8 @@ sound_wav <- function(
     filename = filename,
     timestamp = file.info(filename)$mtime,
     sample_rate = sample_rate,
+    duration = length(values) / sample_rate,
+    total_duration = header$samples / sample_rate,
     te_factor = te_factor,
     left_channel = channel == "left",
     stringsAsFactors = FALSE

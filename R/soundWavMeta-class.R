@@ -27,6 +27,8 @@ setValidity(
       has_name(object@Recording, "fingerprint"),
       has_name(object@Recording, "filename"),
       has_name(object@Recording, "timestamp"),
+      has_name(object@Recording, "duration"),
+      has_name(object@Recording, "total_duration"),
       has_name(object@Recording, "sample_rate"),
       has_name(object@Recording, "te_factor"),
       has_name(object@Recording, "left_channel")
@@ -36,6 +38,8 @@ setValidity(
       inherits(object@Recording$filename, "character"),
       inherits(object@Recording$timestamp, "POSIXct"),
       inherits(object@Recording$sample_rate, "numeric"),
+      inherits(object@Recording$duration, "numeric"),
+      inherits(object@Recording$total_duration, "numeric"),
       inherits(object@Recording$te_factor, "numeric"),
       inherits(object@Recording$left_channel, "logical"),
       noNA(object@Recording)

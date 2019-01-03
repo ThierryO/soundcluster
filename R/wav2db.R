@@ -138,6 +138,8 @@ wav2db <- function(
       value = data.frame(
         fingerprint = pulses@Recording$fingerprint,
         timestamp = as.integer(pulses@Recording$timestamp),
+        duration = pulses@Recording$duration,
+        total_duration = pulses@Recording$total_duration,
         device = device_id$id,
         filename = pulses@Recording$filename,
         stringsAsFactors = FALSE

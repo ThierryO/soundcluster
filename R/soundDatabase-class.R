@@ -45,6 +45,11 @@ setValidity(
           dbListFields(object@Connection, "pyramid")
       ),
       all(
+        c("id", "fingerprint", "timestamp", "duration", "total_duration",
+          "device", "filename") %in%
+          dbListFields(object@Connection, "recording")
+      ),
+      all(
         c("id", "fingerprint", "recording", "window_ms", "window_n",
           "overlap") %in%
           dbListFields(object@Connection, "spectrogram")
