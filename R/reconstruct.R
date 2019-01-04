@@ -54,6 +54,7 @@ reconstruct.data.frame <- function(x, ...) {
 #' @export
 #' @importFrom methods validObject
 #' @importFrom assertthat assert_that is.string
+#' @importFrom raster merge
 #' @param spectrogram the fingerprint of the selected spectrogram
 reconstruct.soundPulse <- function(x, ..., spectrogram) {
   validObject(x)
@@ -156,4 +157,51 @@ reconstruct.soundCluster <- function(x, ...) {
     }
   )
   reconstruct(pulse)
+}
+
+#' @rdname reconstruct
+#' @export
+#' @importFrom assertthat assert_that is.string
+#' @importFrom methods validObject
+#' @importFrom RSQLite dbGetQuery
+#' @importFrom raster merge
+reconstruct.soundDatabase <- function(x, ..., spectrogram) {
+  assert_that(is.string(spectrogram))
+  validObject(x)
+
+  pulse <- dbGetQuery(
+    x@Connection,
+    sprintf(
+      "SELECT
+        p.id, p.peak_amplitude, p.start_amplitude, p.start_time, p.end_time,
+        p.start_frequency, p.end_frequency
+      FROM spectrogram AS s INNER JOIN pulse AS p ON s.id = p.spectrogram
+      WHERE s.fingerprint = %s
+      ORDER BY p.id",
+      dbQuoteString(x@Connection, spectrogram)
+    )
+  )
+  pulse$shape <- lapply(
+    pulse$id,
+    function(id) {
+      pyramid <- dbGetQuery(
+        x@Connection,
+        sprintf(
+          "SELECT quadrant, value
+          FROM pyramid
+          WHERE pulse = %s",
+          dbQuoteLiteral(x@Connection, id)
+        )
+      )
+      z <- pyramid$value
+      names(z) <- paste0("Q", pyramid$quadrant)
+      pyramid2shape(z)
+    }
+  )
+  raster_pulse <- reconstruct(pulse)
+  while (length(raster_pulse) > 1) {
+    raster_pulse[[1]] <- merge(raster_pulse[[1]], raster_pulse[[2]])
+    raster_pulse[[2]] <- NULL
+  }
+  return(raster_pulse[[1]])
 }
