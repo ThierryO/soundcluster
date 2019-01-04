@@ -28,7 +28,6 @@ Suggests:
   igraph,
   littler
 Collate: 
-    'cluster.R'
     'connect_db.R'
     'extract_full_pulse.R'
     'import_S3_classes.R'
@@ -45,6 +44,7 @@ Collate:
     'soundPyramid-class.R'
     'soundSpectrogram-class.R'
     'soundWav-class.R'
+    'sound_cluster.R'
     'sound_pyramid.R'
     'sound_wav.R'
     'vif.R'
