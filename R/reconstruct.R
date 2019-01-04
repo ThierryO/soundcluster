@@ -130,6 +130,7 @@ pyramid2shape <- function(z) {
 #' @importFrom methods validObject
 reconstruct.soundCluster <- function(x, ...) {
   validObject(x)
+
   z <- x@Network$codes[[1]]
   cols <- colnames(z)
   rescaled <- t(z) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
@@ -144,11 +145,14 @@ reconstruct.soundCluster <- function(x, ...) {
     end_frequency = rescaled["peak_frequency", ] +
       (1 - rescaled["start_frequency", ]) * rescaled["frequency_range", ]
   )
-  relevant <- t(rescaled[grep("^P[0-3]*$", cols), ])
+
+  z <- x@Network$codes[[2]]
+  cols <- colnames(z)
+  rescaled <- t(z) * x@Scaling[cols, "sd"] + x@Scaling[cols, "center"]
   pulse$shape <- lapply(
-    seq_len(nrow(relevant)),
+    seq_len(ncol(rescaled)),
     function(i) {
-      pyramid2shape(relevant[i, ])
+      pyramid2shape(rescaled[, i])
     }
   )
   reconstruct(pulse)

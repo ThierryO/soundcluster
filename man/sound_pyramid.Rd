@@ -2,12 +2,20 @@
 % Please edit documentation in R/sound_pyramid.R
 \name{sound_pyramid}
 \alias{sound_pyramid}
-\title{Prepare apulse parameters based on generic pulse properties and the pyramids of the shape}
+\alias{sound_pyramid.soundPulse}
+\alias{sound_pyramid.soundDatabase}
+\title{Prepare pulse parameters based on generic pulse properties and the pyramids of the shape}
 \usage{
-sound_pyramid(sound_pulse, end_frequency = c(10, Inf))
+sound_pyramid(x, ...)
+
+\method{sound_pyramid}{soundPulse}(x, end_frequency = c(10, Inf), ...)
+
+\method{sound_pyramid}{soundDatabase}(x, ...)
 }
 \arguments{
-\item{sound_pulse}{a soundPulse object}
+\item{x}{the object}
+
+\item{...}{further arguments used by some methods}
 
 \item{end_frequency}{a vector of length 2 defining the lower and upper boundary for the end frequency of relevant pulses}
 }
@@ -19,6 +27,6 @@ sound_pyramid(sound_pulse, end_frequency = c(10, Inf))
 \item \code{frequency_range}: the difference between highest and lowest frequency in the pulse (in kHz)
 \item \code{start_frequency}: the relative distance between the peak frequency and the lowest frequency in the pulse. Defined as the difference devided by the frequency range.
 \item \code{peak_amplitude}: the amplitude of the peak in dB. 0 dB is the median loudness
-\item \code{PXXXX}: a set of pyramid values describing the shape of the pulse. The number of pyramid values depends on the total number of pulses and the dimensions of the shape
+\item \code{QXXXX}: a set of pyramid values describing the shape of the pulse. The number of pyramid values depends on the total number of pulses and the dimensions of the shape
 }
 }

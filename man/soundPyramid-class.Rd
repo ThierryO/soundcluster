@@ -11,6 +11,7 @@ Holds pyramids of pulses and their metadata.
 
 \describe{
 \item{\code{Pulse}}{A data.frame with \code{fingerprint} and its \code{spectrogram}}
+\item{\code{PulseMeta}}{A matrix with pulse meta data like duration, frequency_range, ...}
 \item{\code{Pyramid}}{A matrix with pyramid values}
 \item{\code{Scaling}}{A matrix with \code{center} and \code{sd} for used to center each variable in \code{Pyramid}}
 \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}

@@ -4,6 +4,7 @@
 #' @section Slots:
 #' \describe{
 #'   \item{\code{Pulse}}{A data.frame with `fingerprint` and its `spectrogram`}
+#'   \item{\code{PulseMeta}}{A matrix with pulse meta data like duration, frequency_range, ...}
 #'   \item{\code{Pyramid}}{A matrix with pyramid values}
 #'   \item{\code{Scaling}}{A matrix with `center` and `sd` for used to center each variable in `Pyramid`}
 #'   \item{\code{Recording}}{A data.frame with fingerprint, filename, timestamp, sample_rate, te_factor, left_channel}
