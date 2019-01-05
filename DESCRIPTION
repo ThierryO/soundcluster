@@ -26,7 +26,8 @@ Imports:
   utils
 Suggests:
   igraph,
-  littler
+  littler,
+  shiny
 Collate: 
     'connect_db.R'
     'extract_full_pulse.R'
