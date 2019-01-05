@@ -78,8 +78,40 @@ connect_db <- function(path = ".") {
     connection,
     "CREATE TABLE IF NOT EXISTS pyramid (
       pulse INTEGER NOT NULL REFERENCES pulse (id),
-      quadrant integer NOT NULL,
+      quadrant INTEGER NOT NULL,
       value REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS species (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parent INTEGER REFERENCES species (id),
+      gbif INTEGER UNIQUE,
+      name TEXT NOT NULL UNIQUE
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS behaviour (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS class (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      abbreviation TEXT NOT NULL UNIQUE,
+      description TEXT,
+      species INTEGER REFERENCES species (id),
+      behaviour INTEGER REFERENCES behaviour (id)
     )"
   )
   dbClearResult(res)

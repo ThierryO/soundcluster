@@ -7,11 +7,46 @@ shinyUI(fluidPage(
       textInput("path", label = "project path", value = "~"),
       actionButton("step_backward", label = "<<<"),
       actionButton("step_forward", label = ">>>"),
+      selectizeInput(
+        "class", label = "class", choices = "[new class]",
+        selected = "[new class]"
+      ),
+      conditionalPanel(
+        condition = "input.class == '[new class]'",
+        textInput("class_abbrev", label = "abbreviation", value = ""),
+        textInput("class_description", label = "description", value = ""),
+        selectInput(
+          "species", label = "species",
+          choices = c("[no species]", "[new species]"),
+          selected = "[no species]"
+        ),
+        conditionalPanel(
+          condition = "input.species == '[new species]'",
+          textInput("species_name", label = "name", value = ""),
+          selectInput(
+            "species_parent", label = "parent", choices = "[no parent]",
+            selected = "[no parent]"
+          ),
+          numericInput("species_gbif", label = "gbif", value = NA),
+          actionButton("new_species", label = "add species")
+        ),
+        selectInput(
+          "behaviour", label = "behaviour",
+          choices = c("[no behaviour]", "[new behaviour]"),
+          selected = "[no behaviour]"
+        ),
+        conditionalPanel(
+          condition = "input.behaviour == '[new behaviour]'",
+          textInput("behaviour_name", label = "name", value = ""),
+          actionButton("new_behaviour", label = "add behaviour")
+        ),
+        actionButton("new_class", label = "add class")
+      ),
       sliderInput(
         "starttime",
         label = "start time (ms)",
-        value = 0,
-        min = 0,
+        value = -1,
+        min = -1,
         max = 10000,
         step = 200,
         animate = animationOptions(interval = 1000)
