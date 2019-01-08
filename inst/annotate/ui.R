@@ -40,6 +40,17 @@ shinyUI(fluidPage(
           textInput("behaviour_name", label = "name", value = ""),
           actionButton("new_behaviour", label = "add behaviour")
         ),
+        textInput("class_color", label = "color", value = "black"),
+        selectInput(
+          "class_linetype", label = "linetype",
+          choices =
+            c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash"),
+          selected = "solid"
+        ),
+        sliderInput(
+          "class_angle", label = "angle",
+          value = 45, min = -90, max = 90, step = 5
+        ),
         actionButton("new_class", label = "add class")
       ),
       sliderInput(

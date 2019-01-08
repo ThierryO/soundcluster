@@ -5,27 +5,29 @@ library(raster)
 
 find_start <- function(data, input) {
   start <- mean(
-    data$pulse$start_time[data$current_pulse],
-    data$pulse$end_time[data$current_pulse]
-  ) - input$timeinterval / 2
+    c(
+      data$pulse$start_time[data$current_pulse],
+      data$pulse$end_time[data$current_pulse]
+    )
+  ) - 0.5 * input$timeinterval
   start <- pmin(
     pmax(0, start),
-    data$maximum
+    data$maximum - input$timeinterval
   )
   floor(start)
 }
 
 shinyServer(function(input, output, session) {
   data <- reactiveValues(
-    db = NULL,
-    spectrograms = NULL,
-    current_spectrogram = NULL,
-    pulse = NULL,
-    current_pulse = NULL,
-    sonogram = NULL,
     clamped = NULL,
-    title = NULL,
-    maximum = NULL
+    current_pulse = NULL,
+    current_spectrogram = NULL,
+    db = NULL,
+    maximum = NULL,
+    pulse = NULL,
+    sonogram = NULL,
+    spectrograms = NULL,
+    title = NULL
   )
 
   observeEvent(
@@ -126,6 +128,14 @@ shinyServer(function(input, output, session) {
           dbQuoteLiteral(data$db@Connection, data$current_spectrogram)
         )
       )
+      max_freq <- ceiling(max(c(data$pulse$end_frequency, 150)))
+      updateSliderInput(
+        session, "frequency", value = c(0, max_freq), max = max_freq
+      )
+      updateSliderInput(
+        session, "timeinterval",
+        value = max_freq * as.numeric(input$aspect) * 1.35
+      )
       data$title <- meta$filename
       data$current_pulse <- 1
       wav <- sound_wav(
@@ -144,14 +154,14 @@ shinyServer(function(input, output, session) {
         ymn = min(sonogram@SpecGram$f),
         ymx = max(sonogram@SpecGram$f)
       )
-      data$maximum <- floor(max(sonogram@SpecGram$t) - input$timeinterval)
+      data$maximum <- floor(tail(sonogram@SpecGram$t, 1))
 
       updateSliderInput(
         session,
         "starttime",
         value = find_start(data, input),
         min = floor(min(sonogram@SpecGram$t)),
-        max = data$maximum
+        max = data$maximum - input$timeinterval
       )
     }
   )
@@ -192,7 +202,9 @@ shinyServer(function(input, output, session) {
     if (is.null(data$clamped) || input$starttime < 0) {
       return(NULL)
     }
-    breaks <- pretty(input$amplitude[1]:input$amplitude[2], 20)
+    isolate(
+      breaks <- pretty(input$amplitude[1]:input$amplitude[2], 20)
+    )
     plot(
       data$clamped,
       breaks = breaks,
@@ -204,6 +216,26 @@ shinyServer(function(input, output, session) {
       asp = input$aspect,
       main = data$title
     )
+    rect(
+      xleft = data$pulse$start_time,
+      xright = data$pulse$end_time,
+      ybottom = data$pulse$start_frequency,
+      ytop = data$pulse$end_frequency,
+      border = "black",
+      density = 2,
+      angle = 45,
+      lwd = 2
+    )
+    rect(
+      xleft = data$pulse$start_time[data$current_pulse],
+      xright = data$pulse$end_time[data$current_pulse],
+      ybottom = data$pulse$start_frequency[data$current_pulse],
+      ytop = data$pulse$end_frequency[data$current_pulse],
+      border = "black",
+      density = 2,
+      angle = 45,
+      lwd = 4
+    )
     abline(
       h = c(20, 30, 40, 50, 60, 80, 90, 110),
       lty = 2,
@@ -211,48 +243,6 @@ shinyServer(function(input, output, session) {
       lwd = 2
     )
     abline(h = c(18, 21, 27, 35), lty = 3, col = "white", lwd = 2)
-    segments(
-      x0 = c(data$pulse$start_time, data$pulse$start_time,
-             data$pulse$start_time, data$pulse$end_time),
-      x1 = c(data$pulse$start_time, data$pulse$end_time,
-             data$pulse$end_time, data$pulse$end_time),
-      y0 = c(data$pulse$start_frequency, data$pulse$start_frequency,
-             data$pulse$end_frequency, data$pulse$start_frequency),
-      y1 = c(data$pulse$end_frequency, data$pulse$start_frequency,
-             data$pulse$end_frequency, data$pulse$end_frequency),
-      col = "black",
-      lwd = 1
-    )
-    isolate(
-      segments(
-        x0 = c(
-          data$pulse$start_time[data$current_pulse],
-          data$pulse$start_time[data$current_pulse],
-          data$pulse$start_time[data$current_pulse],
-          data$pulse$end_time[data$current_pulse]
-        ),
-        x1 = c(
-          data$pulse$start_time[data$current_pulse],
-          data$pulse$end_time[data$current_pulse],
-          data$pulse$end_time[data$current_pulse],
-          data$pulse$end_time[data$current_pulse]
-        ),
-        y0 = c(
-          data$pulse$start_frequency[data$current_pulse],
-          data$pulse$start_frequency[data$current_pulse],
-          data$pulse$end_frequency[data$current_pulse],
-          data$pulse$start_frequency[data$current_pulse]
-        ),
-        y1 = c(
-          data$pulse$end_frequency[data$current_pulse],
-          data$pulse$start_frequency[data$current_pulse],
-          data$pulse$end_frequency[data$current_pulse],
-          data$pulse$end_frequency[data$current_pulse]
-        ),
-        col = "red",
-        lwd = 2
-      )
-    )
   })
 
   observeEvent(
@@ -298,7 +288,8 @@ shinyServer(function(input, output, session) {
         session,
         "starttime",
         value = find_start(data, input),
-        step = input$timeinterval
+        step = input$timeinterval,
+        max = data$maximum - input$timeinterval
       )
     }
   )
@@ -454,12 +445,17 @@ shinyServer(function(input, output, session) {
           res <- dbSendQuery(
             data$db@Connection,
             sprintf(
-              "INSERT INTO class (abbreviation, description, species, behaviour)
-              VALUES (%s, %s, %s, %s)",
+              "INSERT INTO class
+                (abbreviation, description, species, behaviour, color, linetype,
+                angle)
+              VALUES (%s, %s, %s, %s, %s, %s, %s)",
               dbQuoteString(data$db@Connection, input$class_abbrev),
               dbQuoteString(data$db@Connection, input$class_description),
               species,
-              behaviour
+              behaviour,
+              dbQuoteString(data$db@Connection, input$class_color),
+              dbQuoteString(data$db@Connection, input$class_linetype),
+              dbQuoteLiteral(data$db@Connection, input$class_angle)
             )
           )
           dbClearResult(res)

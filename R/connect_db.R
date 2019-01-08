@@ -57,10 +57,46 @@ connect_db <- function(path = ".") {
 
   res <- dbSendQuery(
     connection,
+    "CREATE TABLE IF NOT EXISTS species (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parent INTEGER REFERENCES species (id),
+      gbif INTEGER UNIQUE,
+      name TEXT NOT NULL UNIQUE
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS behaviour (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT DEFAULT 'black',
+      linetype TEXT DEFAULT 'solid',
+      angle INTEGER DEFAULT 45
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS class (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      abbreviation TEXT NOT NULL UNIQUE,
+      description TEXT,
+      species INTEGER REFERENCES species (id),
+      behaviour INTEGER REFERENCES behaviour (id)
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
     "CREATE TABLE IF NOT EXISTS pulse (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
       spectrogram INTEGER NOT NULL REFERENCES spectrogram (id),
+      class INTEGER REFERENCES class (id),
       peak_time REAL NOT NULL,
       peak_frequency REAL NOT NULL,
       peak_amplitude REAL NOT NULL,
@@ -80,38 +116,6 @@ connect_db <- function(path = ".") {
       pulse INTEGER NOT NULL REFERENCES pulse (id),
       quadrant INTEGER NOT NULL,
       value REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS species (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      parent INTEGER REFERENCES species (id),
-      gbif INTEGER UNIQUE,
-      name TEXT NOT NULL UNIQUE
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS behaviour (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS class (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      abbreviation TEXT NOT NULL UNIQUE,
-      description TEXT,
-      species INTEGER REFERENCES species (id),
-      behaviour INTEGER REFERENCES behaviour (id)
     )"
   )
   dbClearResult(res)
