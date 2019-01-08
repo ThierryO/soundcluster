@@ -43,37 +43,52 @@ shinyServer(function(input, output, session) {
       }
       behaviour <- dbGetQuery(
         data$db@Connection,
-        "SELECT name FROM behaviour ORDER BY name"
+        "SELECT id, name FROM behaviour ORDER BY name"
       )
       updateSelectInput(
         session,
         "behaviour",
-        choices = c(behaviour$name, "[no behaviour]", "[new behaviour]")
+        choices = c(
+          setNames(behaviour$id, behaviour$name),
+          "[no behaviour]" = "0", "[new behaviour]" = "-1"
+        ),
+        selected = "0"
       )
+
       species <- dbGetQuery(
         data$db@Connection,
-        "SELECT name FROM species ORDER BY name"
+        "SELECT id, name FROM species ORDER BY name"
       )
       updateSelectInput(
         session,
         "species",
-        choices = c(species$name, "[no species]", "[new species]")
+        choices = c(
+          setNames(species$id, species$name),
+          "[no species]" = "0", "[new species]" = "-1"
+        ),
+        selected = "0"
       )
       updateSelectInput(
         session,
         "species_parent",
-        choices = c(species$name, "[no parent]"),
-        selected = "[no parent]"
+        choices = c(setNames(species$id, species$name), "[no parent]" = "0"),
+        selected = "0"
       )
+
       class <- dbGetQuery(
         data$db@Connection,
-        "SELECT abbreviation FROM class ORDER BY abbreviation"
+        "SELECT id, abbreviation
+        FROM class ORDER BY abbreviation"
       )
       updateSelectInput(
         session,
-        "class",
-        choices = c(class$abbreviation, "[new class]")
+        "class_id",
+        choices = c(
+          setNames(class$id, class$abbreviation),
+          "[no class]" = "0", "[new class]" = "-1"
+        )
       )
+
       data$spectrograms <- dbGetQuery(
         data$db@Connection,
         "SELECT s.id, count(p.id) AS n_pulse
@@ -120,14 +135,21 @@ shinyServer(function(input, output, session) {
         data$db@Connection,
         sprintf(
           "SELECT
-            id, start_time, end_time, start_frequency, end_frequency, peak_time,
-            peak_frequency
+            pulse.id, start_time, end_time, start_frequency, end_frequency,
+            peak_time, peak_frequency,
+            CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
+            CASE WHEN color IS NULL THEN 'black' ELSE color END AS color,
+            CASE
+              WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
+            CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
           FROM pulse
+          LEFT JOIN class ON pulse.class = class.id
           WHERE spectrogram = %s
           ORDER BY start_time",
           dbQuoteLiteral(data$db@Connection, data$current_spectrogram)
         )
       )
+
       max_freq <- ceiling(max(c(data$pulse$end_frequency, 150)))
       updateSliderInput(
         session, "frequency", value = c(0, max_freq), max = max_freq
@@ -221,9 +243,11 @@ shinyServer(function(input, output, session) {
       xright = data$pulse$end_time,
       ybottom = data$pulse$start_frequency,
       ytop = data$pulse$end_frequency,
-      border = "black",
+      col = data$pulse$color,
+      border = data$pulse$color,
       density = 2,
-      angle = 45,
+      angle = data$pulse$angle,
+      lty = data$pulse$linetype,
       lwd = 2
     )
     rect(
@@ -231,9 +255,11 @@ shinyServer(function(input, output, session) {
       xright = data$pulse$end_time[data$current_pulse],
       ybottom = data$pulse$start_frequency[data$current_pulse],
       ytop = data$pulse$end_frequency[data$current_pulse],
-      border = "black",
+      col = data$pulse$color[data$current_pulse],
+      border = data$pulse$color[data$current_pulse],
       density = 2,
-      angle = 45,
+      angle = data$pulse$angle[data$current_pulse],
+      lty = data$pulse$linetype[data$current_pulse],
       lwd = 4
     )
     abline(
@@ -255,11 +281,6 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       data$current_pulse  <- data$current_pulse - 1
-      updateSliderInput(
-        session,
-        "starttime",
-        value = find_start(data, input)
-      )
     }
   )
 
@@ -273,10 +294,21 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       data$current_pulse  <- data$current_pulse + 1
+    }
+  )
+
+  observeEvent(
+    data$current_pulse,
+    {
       updateSliderInput(
         session,
         "starttime",
         value = find_start(data, input)
+      )
+      updateSelectInput(
+        session,
+        "class_id",
+        selected = as.character(data$pulse$class[data$current_pulse])
       )
     }
   )
@@ -297,7 +329,7 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$new_behaviour,
     {
-      if (!input$behaviour_name %in% c("", "[no behaviour]")) {
+      if (input$behaviour_name != "") {
         current <- dbGetQuery(
           data$db@Connection,
           sprintf(
@@ -318,13 +350,16 @@ shinyServer(function(input, output, session) {
           dbClearResult(res)
           behaviour <- dbGetQuery(
             data$db@Connection,
-            "SELECT name FROM behaviour ORDER BY name"
+            "SELECT id, name FROM behaviour ORDER BY name"
           )
           updateSelectInput(
             session,
             "behaviour",
-            choices = c(behaviour$name, "[no behaviour]", "[new behaviour]"),
-            selected = "[no behaviour]"
+            choices = c(
+              setNames(behaviour$id, behaviour$name),
+              "[no behaviour]" = "0", "[new behaviour]" = "-1"
+            ),
+            selected = "0"
           )
         }
       }
@@ -335,7 +370,7 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$new_species,
     {
-      if (!input$species_name %in% c("", "[no species]")) {
+      if (input$species_name != "") {
         current <- dbGetQuery(
           data$db@Connection,
           sprintf(
@@ -346,55 +381,49 @@ shinyServer(function(input, output, session) {
           )
         )$n
         if (current == 0) {
-          if (input$species_parent == "[no parent]") {
-            parent <- "NULL"
+          if (input$species_parent == "0") {
+            this_parent <- "NULL"
           } else {
-            parent <- as.character(
-              dbGetQuery(
-                data$db@Connection,
-                sprintf(
-                  "SELECT id FROM species WHERE name = %s",
-                  dbQuoteString(data$db@Connection, input$species_parent)
-                )
-              )$id
-            )
+            this_parent <- input$species_parent
           }
           if (is.na(input$species_gbif)) {
-            gbif <- "NULL"
+            this_gbif <- "NULL"
           } else {
-            gbif <- dbQuoteLiteral(data$db@Connection, input$species_gbif)
+            this_gbif <- dbQuoteLiteral(data$db@Connection, input$species_gbif)
           }
           res <- dbSendQuery(
             data$db@Connection,
             sprintf(
               "INSERT INTO species (name, parent, gbif) VALUES (%s, %s, %s)",
               dbQuoteString(data$db@Connection, input$species_name),
-              parent,
-              gbif
+              this_parent,
+              this_gbif
             )
           )
           dbClearResult(res)
           species <- dbGetQuery(
             data$db@Connection,
-            "SELECT name FROM species ORDER BY name"
+            "SELECT id, name FROM species ORDER BY name"
           )
           updateSelectInput(
             session,
             "species",
-            choices = c(species$name, "[no species]", "[new species]"),
-            selected = "[no species]"
+            choices = c(
+              setNames(species$id, species$name),
+              "[no species]" = "0", "[new species]" = "-1"
+            ),
+            selected = "0"
           )
           updateSelectInput(
             session,
             "species_parent",
-            choices = c(species$name, "[no parent]"),
-            selected = "[no parent]"
+            choices = c(setNames(species$id, species$name), "[no parent]" = "0")
           )
         }
       }
       updateTextInput(session, "species_name", value = "")
       updateNumericInput(session, "species_gbif", value = NA)
-      updateSelectInput(session, "species_parent", selected = "[no parent]")
+      updateSelectInput(session, "species_parent", selected = 0)
     }
   )
 
@@ -403,8 +432,8 @@ shinyServer(function(input, output, session) {
     {
       if (
         input$class_abbrev != "" &&
-        input$species != "[new species]" &&
-        input$behaviour != "[new behaviour]"
+        input$species != "-1" &&
+        input$behaviour != "-1"
       ) {
         current <- dbGetQuery(
           data$db@Connection,
@@ -416,31 +445,15 @@ shinyServer(function(input, output, session) {
           )
         )$n
         if (current == 0) {
-          if (input$species == "[no species]") {
-            species == "NULL"
+          if (input$species == "0") {
+            this_species <- "NULL"
           } else {
-            species <- as.character(
-              dbGetQuery(
-                data$db@Connection,
-                sprintf(
-                  "SELECT id FROM species WHERE name = %s",
-                  dbQuoteString(data$db@Connection, input$species)
-                )
-              )$id
-            )
+            this_species <- input$species
           }
-          if (input$behaviour == "[no behaviour]") {
-            behaviour == "NULL"
+          if (input$behaviour == "0") {
+            this_behaviour <- "NULL"
           } else {
-            behaviour <- as.character(
-              dbGetQuery(
-                data$db@Connection,
-                sprintf(
-                  "SELECT id FROM behaviour WHERE name = %s",
-                  dbQuoteString(data$db@Connection, input$behaviour)
-                )
-              )$id
-            )
+            this_behaviour <- input$behaviour
           }
           res <- dbSendQuery(
             data$db@Connection,
@@ -451,8 +464,8 @@ shinyServer(function(input, output, session) {
               VALUES (%s, %s, %s, %s, %s, %s, %s)",
               dbQuoteString(data$db@Connection, input$class_abbrev),
               dbQuoteString(data$db@Connection, input$class_description),
-              species,
-              behaviour,
+              this_species,
+              this_behaviour,
               dbQuoteString(data$db@Connection, input$class_color),
               dbQuoteString(data$db@Connection, input$class_linetype),
               dbQuoteLiteral(data$db@Connection, input$class_angle)
@@ -462,16 +475,63 @@ shinyServer(function(input, output, session) {
         }
         class <- dbGetQuery(
           data$db@Connection,
-          "SELECT abbreviation FROM class ORDER BY abbreviation"
+          "SELECT id, abbreviation
+          FROM class ORDER BY abbreviation"
         )
         updateSelectInput(
           session,
-          "class",
-          choices = c(class$abbreviation, "[new class]")
+          "class_id",
+          choices = c(
+            setNames(class$id, class$abbreviation),
+            "[no class]" = "0", "[new class]" = "-1"
+          ),
+          selected = "0"
         )
       }
       updateTextInput(session, "class_abbrev", value = "")
       updateTextInput(session, "class_description", value = "")
+    }
+  )
+
+  observeEvent(
+    input$update_class,
+    {
+      if (as.integer(input$class_id) < 1) {
+        return(NULL)
+      }
+      res <- dbSendQuery(
+        data$db@Connection,
+        sprintf(
+          "UPDATE pulse SET class = %s WHERE id = %s",
+          dbQuoteLiteral(data$db@Connection, as.integer(input$class_id)),
+          dbQuoteLiteral(
+             data$db@Connection, data$pulse$id[data$current_pulse]
+          )
+        )
+      )
+      dbClearResult(res)
+      data$pulse <- dbGetQuery(
+        data$db@Connection,
+        sprintf(
+          "SELECT
+            pulse.id, start_time, end_time, start_frequency, end_frequency,
+            peak_time, peak_frequency,
+            CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
+            CASE WHEN color IS NULL THEN 'black' ELSE color END AS color,
+            CASE
+              WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
+            CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
+          FROM pulse
+          LEFT JOIN class ON pulse.class = class.id
+          WHERE spectrogram = %s
+          ORDER BY start_time",
+          dbQuoteLiteral(data$db@Connection, data$current_spectrogram)
+        )
+      )
+      if (data$current_pulse == nrow(data$pulse)) {
+        return(NULL)
+      }
+      data$current_pulse  <- data$current_pulse + 1
     }
   )
 })

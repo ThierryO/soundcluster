@@ -8,20 +8,22 @@ shinyUI(fluidPage(
       actionButton("step_backward", label = "<<<"),
       actionButton("step_forward", label = ">>>"),
       selectizeInput(
-        "class", label = "class", choices = "[new class]",
-        selected = "[new class]"
+        "class_id", label = "class",
+        choices = c("[no class]" = "0", "[new class]" = "-1"),
+        selected = "0"
       ),
+      actionButton("update_class", label = "update class"),
       conditionalPanel(
-        condition = "input.class == '[new class]'",
+        condition = "input.class_id == '-1'",
         textInput("class_abbrev", label = "abbreviation", value = ""),
         textInput("class_description", label = "description", value = ""),
         selectInput(
           "species", label = "species",
-          choices = c("[no species]", "[new species]"),
-          selected = "[no species]"
+          choices = c("[no species]" = "0", "[new species]" = "-1"),
+          selected = "0"
         ),
         conditionalPanel(
-          condition = "input.species == '[new species]'",
+          condition = "input.species == '-1'",
           textInput("species_name", label = "name", value = ""),
           selectInput(
             "species_parent", label = "parent", choices = "[no parent]",
@@ -32,11 +34,11 @@ shinyUI(fluidPage(
         ),
         selectInput(
           "behaviour", label = "behaviour",
-          choices = c("[no behaviour]", "[new behaviour]"),
-          selected = "[no behaviour]"
+          choices = c("[no behaviour]" = "0", "[new behaviour]" = "-1"),
+          selected = "0"
         ),
         conditionalPanel(
-          condition = "input.behaviour == '[new behaviour]'",
+          condition = "input.behaviour == -1",
           textInput("behaviour_name", label = "name", value = ""),
           actionButton("new_behaviour", label = "add behaviour")
         ),
