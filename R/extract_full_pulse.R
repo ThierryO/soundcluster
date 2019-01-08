@@ -2,11 +2,13 @@
 #' @param spectrogram a `soundSpectrogram` object
 #' @param threshold_amplitude relevant regions have an amplitude above the `threshold_amplitude`. Defaults to 10 dB.
 #' @param min_peak_amplitude the maximum amplitude in a relevant region must be above `min_peak_amplitude`. Defaults to 30 dB.
+#' @param max_peak_amplitude ignore regions where the maximum amplitude is above `max_peak_amplitude`.
 #' @param dimensions the number of rows and columns used to resample the shape. Must be a single number and a power of 2. Will be altered to the next power of 2.
 #' @export
 #' @importFrom assertthat assert_that is.number is.count
-#' @importFrom raster raster clump zonal extent crop xyFromCell xmin xmax ymin ymax cellStats resample colSums rowSums which.max as.matrix
+#' @importFrom raster raster clump zonal extent crop xyFromCell xmin xmax ymin ymax cellStats resample colSums rowSums which.max as.matrix overlay
 #' @importFrom digest sha1
+#' @importFrom stats rnorm qnorm
 #' @examples
 #' wav <- sound_wav(
 #'   system.file("demo.wav", package = "soundcluster"),
@@ -19,6 +21,7 @@ extract_full_pulse <- function(
   spectrogram,
   threshold_amplitude = 10,
   min_peak_amplitude = 30,
+  max_peak_amplitude = Inf,
   dimensions = 32
 ) {
   assert_that(
@@ -41,19 +44,31 @@ extract_full_pulse <- function(
 
   relevant <- clump(spectrogram_raster >= threshold_amplitude)
   peak <- zonal(spectrogram_raster, relevant, "max")
+  to_do <- min_peak_amplitude <= peak[, "max"]
+  to_do <- to_do & peak[, "max"] < max_peak_amplitude
   lapply(
-    peak[peak[, "max"] >= min_peak_amplitude, "zone"],
+    peak[to_do, "zone"],
     function(this_clump) {
       local <- relevant$clumps == this_clump
       cols <- range(which(colSums(local, na.rm = TRUE) > 0))
       rows <- range(which(rowSums(local, na.rm = TRUE) > 0))
       local_ext <- extent(local, rows[1], rows[2], cols[1], cols[2])
       clump <- crop(local, local_ext)
-      unscaled <- crop(spectrogram_raster, local_ext)
+      unscaled <- overlay(
+        crop(spectrogram_raster, local_ext),
+        clump,
+        fun = function(x, y) {
+          ifelse(
+            is.na(y) | y == 1,
+            x,
+            rnorm(length(x), sd = threshold_amplitude / qnorm(0.999))
+          )
+        }
+      )
       scaled <- raster(
         ext = local_ext, nrows = dimensions, ncols = dimensions, crs = NULL
       )
-      local_peak <- xyFromCell(unscaled, which.max(clump * unscaled))
+      local_peak <- xyFromCell(unscaled, which.max(unscaled))
       fingerprint <- sha1(
         list(
           spectrogram = spectrogram@Spectrogram$fingerprint,

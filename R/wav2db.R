@@ -5,6 +5,7 @@
 #' @param make the manufacturer of the device
 #' @param model the model of the device
 #' @param serial the optional serial number of the device
+#' @param existing what to do with existing spectrograms. "append" will add new pulses. "skip" will skip the recording.
 #' @inheritParams base::list.files
 #' @inheritParams sound_wav
 #' @inheritParams wav2spectrogram
@@ -18,7 +19,7 @@ wav2db <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
   overlap = 0.9, threshold_amplitude = 10, min_peak_amplitude = 30,
-  dimensions = 32
+  dimensions = 32, existing = c("append", "skip")
 ) {
   assert_that(
     inherits(db, "soundDatabase"),
@@ -31,6 +32,7 @@ wav2db <- function(
     is.string(serial)
   )
   channel <- match.arg(channel)
+  existing <- match.arg(existing)
 
   if (file_test("-f", path)) {
     message(path)
@@ -41,7 +43,7 @@ wav2db <- function(
         "SELECT
           r.fingerprint, r.timestamp,
           d.serial, d.sample_rate,
-          s.window_ms
+          s.window_ms, min(p.peak_amplitude) AS max_peak_amplitude
         FROM  device AS d
         INNER JOIN recording AS r ON r.device = d.id
         INNER JOIN spectrogram AS s ON s.recording = r.id
@@ -63,8 +65,14 @@ wav2db <- function(
         dbQuoteLiteral(db@Connection, min_peak_amplitude)
       )
     )
-    if (nrow(available) > 0 && isTRUE(all.equal(serial, available$serial))) {
-      return(TRUE)
+    if (nrow(available) > 0) {
+      if (existing == "skip" && isTRUE(all.equal(serial, available$serial))) {
+        return(TRUE)
+      } else {
+        max_peak_amplitude <- available$max_peak_amplitude
+      }
+    } else {
+      max_peak_amplitude <- Inf
     }
     wav <- sound_wav(
       filename = path,
@@ -81,6 +89,7 @@ wav2db <- function(
       spectrogram = spectrogram,
       threshold_amplitude = threshold_amplitude,
       min_peak_amplitude = min_peak_amplitude,
+      max_peak_amplitude = max_peak_amplitude,
       dimensions = dimensions
     )
     rm(spectrogram)
@@ -132,20 +141,6 @@ wav2db <- function(
       device_id <- dbGetQuery(conn = db@Connection, sql)
     }
 
-    dbWriteTable(
-      db@Connection,
-      name = "recording",
-      value = data.frame(
-        fingerprint = pulses@Recording$fingerprint,
-        timestamp = as.integer(pulses@Recording$timestamp),
-        duration = pulses@Recording$duration,
-        total_duration = pulses@Recording$total_duration,
-        device = device_id$id,
-        filename = pulses@Recording$filename,
-        stringsAsFactors = FALSE
-      ),
-      append = TRUE
-    )
     recording_id <- dbGetQuery(
       db@Connection,
       sprintf(
@@ -153,19 +148,30 @@ wav2db <- function(
         dbQuoteString(db@Connection, pulses@Recording$fingerprint)
       )
     )
+    if (nrow(recording_id) == 0) {
+      dbWriteTable(
+        db@Connection,
+        name = "recording",
+        value = data.frame(
+          fingerprint = pulses@Recording$fingerprint,
+          timestamp = as.integer(pulses@Recording$timestamp),
+          duration = pulses@Recording$duration,
+          total_duration = pulses@Recording$total_duration,
+          device = device_id$id,
+          filename = pulses@Recording$filename,
+          stringsAsFactors = FALSE
+        ),
+        append = TRUE
+      )
+      recording_id <- dbGetQuery(
+        db@Connection,
+        sprintf(
+          "SELECT id FROM recording WHERE fingerprint = %s",
+          dbQuoteString(db@Connection, pulses@Recording$fingerprint)
+        )
+      )
+    }
 
-    dbWriteTable(
-      conn = db@Connection,
-      name = "spectrogram",
-      value = data.frame(
-        fingerprint = pulses@Spectrogram$fingerprint,
-        recording = recording_id$id,
-        window_ms = window_ms,
-        overlap = overlap,
-        stringsAsFactors = FALSE
-      ),
-      append = TRUE
-    )
     spectrogram_id <- dbGetQuery(
       db@Connection,
       sprintf(
@@ -173,6 +179,27 @@ wav2db <- function(
         dbQuoteString(db@Connection, pulses@Spectrogram$fingerprint)
       )
     )
+    if (nrow(spectrogram_id) == 0) {
+      dbWriteTable(
+        conn = db@Connection,
+        name = "spectrogram",
+        value = data.frame(
+          fingerprint = pulses@Spectrogram$fingerprint,
+          recording = recording_id$id,
+          window_ms = window_ms,
+          overlap = overlap,
+          stringsAsFactors = FALSE
+        ),
+        append = TRUE
+      )
+      spectrogram_id <- dbGetQuery(
+        db@Connection,
+        sprintf(
+          "SELECT id FROM spectrogram WHERE fingerprint = %s",
+          dbQuoteString(db@Connection, pulses@Spectrogram$fingerprint)
+        )
+      )
+    }
 
     dbWriteTable(
       conn = db@Connection,

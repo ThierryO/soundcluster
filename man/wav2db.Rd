@@ -7,7 +7,8 @@
 wav2db(db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30,
   window_ms = 1, overlap = 0.9, threshold_amplitude = 10,
-  min_peak_amplitude = 30, dimensions = 32)
+  min_peak_amplitude = 30, dimensions = 32, existing = c("append",
+  "skip"))
 }
 \arguments{
 \item{db}{A connection to a soundcluster database}
@@ -39,6 +40,8 @@ recording is longer, the last part is ignored.}
 \item{min_peak_amplitude}{the maximum amplitude in a relevant region must be above \code{min_peak_amplitude}. Defaults to 30 dB.}
 
 \item{dimensions}{the number of rows and columns used to resample the shape. Must be a single number and a power of 2. Will be altered to the next power of 2.}
+
+\item{existing}{what to do with existing spectrograms. "append" will add new pulses. "skip" will skip the recording.}
 }
 \description{
 Extract pulses and store them in a soundcluster database
