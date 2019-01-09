@@ -201,40 +201,42 @@ wav2db <- function(
       )
     }
 
-    dbWriteTable(
-      conn = db@Connection,
-      name = "pulse",
-      value = data.frame(
-        fingerprint = pulses@Pulse$fingerprint,
-        spectrogram = spectrogram_id$id,
-        peak_time = pulses@Pulse$peak_time,
-        peak_frequency = pulses@Pulse$peak_frequency,
-        peak_amplitude = pulses@Pulse$peak_amplitude,
-        start_time = pulses@Pulse$start_time,
-        start_frequency = pulses@Pulse$start_frequency,
-        start_amplitude = pulses@Pulse$start_amplitude,
-        end_time = pulses@Pulse$end_time,
-        end_frequency = pulses@Pulse$end_frequency,
-        select_amplitude = pulses@Pulse$select_amplitude,
-        stringsAsFactors = FALSE
-      ),
-      append = TRUE
-    )
+    if (nrow(pulses@Pulse) > 0) {
+      dbWriteTable(
+        conn = db@Connection,
+        name = "pulse",
+        value = data.frame(
+          fingerprint = pulses@Pulse$fingerprint,
+          spectrogram = spectrogram_id$id,
+          peak_time = pulses@Pulse$peak_time,
+          peak_frequency = pulses@Pulse$peak_frequency,
+          peak_amplitude = pulses@Pulse$peak_amplitude,
+          start_time = pulses@Pulse$start_time,
+          start_frequency = pulses@Pulse$start_frequency,
+          start_amplitude = pulses@Pulse$start_amplitude,
+          end_time = pulses@Pulse$end_time,
+          end_frequency = pulses@Pulse$end_frequency,
+          select_amplitude = pulses@Pulse$select_amplitude,
+          stringsAsFactors = FALSE
+        ),
+        append = TRUE
+      )
 
-    dbWriteTable(
-      conn = db@Connection,
-      name = "staging_pyramid",
-      value = pyramid
-    )
-    res <- dbSendQuery(
-      db@Connection,
-      "INSERT INTO pyramid (pulse, quadrant, value)
-      SELECT p.id AS pulse, sp.quadrant, sp.value
-      FROM staging_pyramid AS sp
-      INNER JOIN pulse AS p ON sp.pulse = p.fingerprint"
-    )
-    dbClearResult(res)
-    dbRemoveTable(conn = db@Connection, name = "staging_pyramid")
+      dbWriteTable(
+        conn = db@Connection,
+        name = "staging_pyramid",
+        value = pyramid
+      )
+      res <- dbSendQuery(
+        db@Connection,
+        "INSERT INTO pyramid (pulse, quadrant, value)
+        SELECT p.id AS pulse, sp.quadrant, sp.value
+        FROM staging_pyramid AS sp
+        INNER JOIN pulse AS p ON sp.pulse = p.fingerprint"
+      )
+      dbClearResult(res)
+      dbRemoveTable(conn = db@Connection, name = "staging_pyramid")
+    }
 
     return(TRUE)
   } else if (!file_test("-d", path)) {

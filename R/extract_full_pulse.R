@@ -46,6 +46,31 @@ extract_full_pulse <- function(
   peak <- zonal(spectrogram_raster, relevant, "max")
   to_do <- min_peak_amplitude <= peak[, "max"]
   to_do <- to_do & peak[, "max"] < max_peak_amplitude
+  if (!any(to_do)) {
+    pulse <- data.frame(
+      fingerprint = character(0),
+      spectrogram = character(0),
+      peak_time = numeric(0),
+      start_time = numeric(0),
+      end_time = numeric(0),
+      peak_frequency = numeric(0),
+      start_frequency = numeric(0),
+      end_frequency = numeric(0),
+      peak_amplitude = numeric(0),
+      start_amplitude = numeric(0),
+      select_amplitude = numeric(0),
+      stringsAsFactors = FALSE
+    )
+    pulse$shape <- list()
+    return(
+      new(
+        "soundPulse",
+        Pulse = pulse,
+        Spectrogram = spectrogram@Spectrogram,
+        Recording = spectrogram@Recording
+      )
+    )
+  }
   lapply(
     peak[to_do, "zone"],
     function(this_clump) {
