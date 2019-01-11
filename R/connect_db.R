@@ -120,5 +120,57 @@ connect_db <- function(path = ".") {
   )
   dbClearResult(res)
 
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS model (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grid_x INTEGER NOT NULL,
+      grid_y INTEGER NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS layer (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model INTEGER NOT NULL REFERENCES model (id),
+      weight REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS model_variable (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS node (
+      layer INTEGER NOT NULL REFERENCES layer (id),
+      node INTEGER NOT NULL,
+      variable INTEGER NOT NULL REFERENCES model_variable (id),
+      value REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS scaling (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model INTEGER NOT NULL REFERENCES model (id),
+      variable INTEGER NOT NULL REFERENCES model_variable (id),
+      center REAL NOT NULL,
+      sd REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
   new("soundDatabase", Connection = connection)
 }
