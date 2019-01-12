@@ -83,15 +83,16 @@ sound_pyramid.soundPulse <- function(x, end_frequency = c(10, Inf), ...) {
 }
 
 #' @rdname sound_pyramid
+#' @param spectrogram an optional spectrogram fingerprint
 #' @importFrom methods validObject
 #' @importFrom RSQLite dbGetQuery dbQuoteLiteral
 #' @importFrom stats sd
 #' @export
-sound_pyramid.soundDatabase <- function(x, ...) {
+sound_pyramid.soundDatabase <- function(x, spectrogram, ...) {
   validObject(x)
-  pulses <- dbGetQuery(
-    x@Connection,
-    "SELECT
+
+  if (missing(spectrogram)) {
+    sql <- "SELECT
       fingerprint,
       peak_frequency,
       end_time - start_time AS duration,
@@ -103,7 +104,33 @@ sound_pyramid.soundDatabase <- function(x, ...) {
       peak_amplitude - select_amplitude AS amplitude_range
     FROM pulse
     ORDER BY id"
-  )
+  } else {
+    assert_that(is.string(spectrogram))
+    spectrogram <- dbGetQuery(
+      x@Connection,
+      sprintf(
+        "SELECT id FROM spectrogram WHERE fingerprint = %s",
+        dbQuoteString(x@Connection, spectrogram)
+      )
+    )$id
+    sql <- sprintf(
+      "SELECT
+        fingerprint,
+        peak_frequency,
+        end_time - start_time AS duration,
+        end_frequency - start_frequency AS frequency_range,
+        (peak_time - start_time) / (end_time - start_time) AS peak_time,
+        (peak_frequency - start_frequency) / (end_frequency - start_frequency) AS
+          start_frequency,
+        peak_amplitude,
+        peak_amplitude - select_amplitude AS amplitude_range
+      FROM pulse
+      WHERE spectrogram = %s
+      ORDER BY id",
+      dbQuoteLiteral(x@Connection, spectrogram)
+    )
+  }
+  pulses <- dbGetQuery(x@Connection, sql)
   fingerprint <- pulses$fingerprint
   pulses$fingerprint <- NULL
 
@@ -115,16 +142,25 @@ sound_pyramid.soundDatabase <- function(x, ...) {
   )
   i <- 1
   while (i <= max_var) {
-    extra <- dbGetQuery(
-      x@Connection,
-      sprintf(
+    if (missing(spectrogram)) {
+      sql <- sprintf(
         "SELECT pulse, value
         FROM pyramid
         WHERE quadrant = %s
         ORDER BY pulse",
         dbQuoteLiteral(x@Connection, i - 1)
       )
-    )
+    } else {
+      sql <- sprintf(
+        "SELECT py.pulse, py.value
+        FROM pyramid AS py INNER JOIN pulse AS pu ON py.pulse = pu.id
+        WHERE pu.spectrogram = %s AND py.quadrant = %s
+        ORDER BY pulse",
+        dbQuoteLiteral(x@Connection, spectrogram),
+        dbQuoteLiteral(x@Connection, i - 1)
+      )
+    }
+    extra <- dbGetQuery(x@Connection, sql)
     if (nrow(extra) < nrow(pulses)) {
       pyramid <- pyramid[, seq_len(i - 1), drop = FALSE]
       break
@@ -142,25 +178,53 @@ sound_pyramid.soundDatabase <- function(x, ...) {
   rownames(pulses) <- fingerprint
   rownames(pyramid) <- fingerprint
 
-  pulse_spectrogram <- dbGetQuery(
-    x@Connection,
-    "SELECT p.fingerprint, s.fingerprint AS spectrogram
+  if (missing(spectrogram)) {
+    sql <- "SELECT p.fingerprint, s.fingerprint AS spectrogram
     FROM pulse AS p INNER JOIN spectrogram AS s ON p.spectrogram = s.id"
-  )
+  } else {
+    sql <- sprintf(
+      "SELECT p.fingerprint, s.fingerprint AS spectrogram
+      FROM pulse AS p INNER JOIN spectrogram AS s ON p.spectrogram = s.id
+      WHERE s.id = %s",
+      dbQuoteLiteral(x@Connection, spectrogram)
+    )
+  }
+  pulse_spectrogram <- dbGetQuery(x@Connection, sql)
 
-  spectrogram <- dbGetQuery(
-    x@Connection,
-    "SELECT s.fingerprint, s.window_ms, s.overlap, r.fingerprint AS recording
+  if (missing(spectrogram)) {
+    sql <- "SELECT
+      s.fingerprint, s.window_ms, s.overlap, r.fingerprint AS recording
     FROM spectrogram AS s INNER JOIN recording AS r ON s.recording = r.id"
-  )
+  } else {
+    sql <- sprintf(
+      "SELECT s.fingerprint, s.window_ms, s.overlap, r.fingerprint AS recording
+      FROM spectrogram AS s INNER JOIN recording AS r ON s.recording = r.id
+      WHERE s.id = %s",
+      dbQuoteLiteral(x@Connection, spectrogram)
+    )
+  }
+  spectrogram_meta <- dbGetQuery(x@Connection, sql)
 
-  recording <- dbGetQuery(
-    x@Connection,
-    "SELECT
-      r.fingerprint, r.filename, r.timestamp, r.duration, r.total_duration ,
-      d.sample_rate, d.te_factor, d.left_channel
-    FROM recording AS r INNER JOIN device AS d ON r.device = d.id"
-  )
+  if (missing(spectrogram)) {
+    sql <- "SELECT
+        r.fingerprint, r.filename, r.timestamp, r.duration, r.total_duration,
+        d.sample_rate, d.te_factor, d.left_channel
+      FROM recording AS r INNER JOIN device AS d ON r.device = d.id"
+  } else {
+    sql <- sprintf(
+      "SELECT
+        r.fingerprint, r.filename, r.timestamp, r.duration, r.total_duration,
+        d.sample_rate, d.te_factor, d.left_channel
+      FROM recording AS r
+      INNER JOIN device AS d ON r.device = d.id
+      INNER JOIN spectrogram AS s ON r.id = s.recording
+      WHERE s.id = %s
+      GROUP BY r.fingerprint, r.filename, r.timestamp, r.duration,
+        r.total_duration, d.sample_rate, d.te_factor, d.left_channel",
+      dbQuoteLiteral(x@Connection, spectrogram)
+    )
+  }
+  recording <- dbGetQuery(x@Connection, sql)
   recording$timestamp <- as.POSIXct(recording$timestamp, origin = "1970-01-01")
   recording$left_channel <- as.logical(recording$left_channel)
 
@@ -170,7 +234,7 @@ sound_pyramid.soundDatabase <- function(x, ...) {
     PulseMeta = pulses,
     Pulse = pulse_spectrogram,
     Scaling = scaling,
-    Spectrogram = spectrogram,
+    Spectrogram = spectrogram_meta,
     Recording = recording
   )
 }
