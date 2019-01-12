@@ -66,7 +66,6 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     x@Connection,
     "staging_variable",
     data.frame(
-      id = NA_integer_,
       name = rownames(cluster@Scaling),
       stringsAsFactors = FALSE
     )
@@ -85,6 +84,26 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   )
   dbRemoveTable(x@Connection, "staging_variable")
   rownames(model_variable) <- model_variable$name
+
+  dbWriteTable(
+    x@Connection,
+    "staging_model_pulse",
+    data.frame(
+      model = model_id,
+      fingerprint = rownames(cluster@Network$data[[1]]),
+      stringsAsFactors = FALSE
+    )
+  )
+  res <- dbSendQuery(
+    x@Connection,
+    "INSERT OR IGNORE INTO model_pulse (pulse, model)
+    SELECT p.id AS pulse, smp.model
+    FROM pulse AS p
+    INNER JOIN staging_model_pulse AS smp ON p.fingerprint = smp.fingerprint
+    ORDER BY p.id"
+  )
+  dbClearResult(res)
+  dbRemoveTable(x@Connection, "staging_model_pulse")
 
   scaling <- as.data.frame(cluster@Scaling)
   scaling$name <- rownames(cluster@Scaling)
@@ -111,22 +130,70 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   )$id
 
   node_id <- as.integer(gsub("V", "", rownames(cluster@Network$codes[[1]])))
+  dbWriteTable(
+    x@Connection,
+    "staging_node",
+    data.frame(
+      model = model_id,
+      x = (node_id - 1) %/% cluster@Network$grid$xdim,
+      y = (node_id - 1) %% cluster@Network$grid$xdim
+    )
+  )
+  res <- dbSendQuery(
+    x@Connection,
+    "INSERT OR IGNORE INTO node (model, x, y)
+    SELECT model, x, y
+    FROM staging_node"
+  )
+  dbClearResult(res)
+  dbRemoveTable(x@Connection, "staging_node")
+  node_id <- dbGetQuery(
+    x@Connection,
+    sprintf(
+      "SELECT id FROM node WHERE model = %s ORDER BY x, y",
+      dbQuoteLiteral(x@Connection, model_id)
+    )
+  )$id
+
   for (i in seq_along(layer_id)) {
     dbWriteTable(
       x@Connection,
-      "node",
+      "node_value",
       data.frame(
         layer = layer_id[i],
-        node = node_id,
-        variable = model_variable[
-          colnames(cluster@Network$codes[[i]]), "variable"
-        ],
-        value = as.vector(cluster@Network$codes[[i]]),
-        stringsAsFactors = FALSE
+        node = rep(node_id, ncol(cluster@Network$codes[[i]])),
+        variable = rep(
+          model_variable[
+            colnames(cluster@Network$codes[[i]]), "variable"
+          ],
+          each = length(node_id)
+        ),
+        value = as.vector(cluster@Network$codes[[i]])
       ),
       append = TRUE
     )
   }
+
+  dbWriteTable(
+    x@Connection,
+    "staging_prediction",
+    data.frame(
+      fingerprint = rownames(cluster@Network$data[[1]]),
+      node = node_id[cluster@Network$unit.classif],
+      distance = cluster@Network$distances,
+      stringsAsFactors = FALSE
+    )
+  )
+  res <- dbSendQuery(
+    x@Connection,
+    "INSERT OR IGNORE INTO prediction (pulse, node, distance)
+    SELECT p.id AS pulse, sp.node, sp.distance
+    FROM staging_prediction AS sp
+    INNER JOIN pulse AS p ON sp.fingerprint = p.fingerprint
+    ORDER BY p.id"
+  )
+  dbClearResult(res)
+  dbRemoveTable(x@Connection, "staging_prediction")
 
   return(invisible(NULL))
 }

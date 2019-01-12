@@ -119,6 +119,18 @@ connect_db <- function(path = ".") {
     )"
   )
   dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_pyramid ON
+    pyramid (pulse, quadrant)"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE INDEX IF NOT EXISTS idx_pyramid_quadrant ON
+    pyramid (quadrant)"
+  )
+  dbClearResult(res)
 
   res <- dbSendQuery(
     connection,
@@ -127,6 +139,21 @@ connect_db <- function(path = ".") {
       grid_x INTEGER NOT NULL,
       grid_y INTEGER NOT NULL
     )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS model_pulse (
+      model INTEGER NOT NULL REFERENCES model (id),
+      pulse INTEGER NOT NULL REFERENCES pulse (id)
+    )"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_pulse ON
+    model_pulse (model, pulse)"
   )
   dbClearResult(res)
 
@@ -152,11 +179,34 @@ connect_db <- function(path = ".") {
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS node (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model INTEGER NOT NULL REFERENCES model (id),
+      x INTEGER NOT NULL,
+      y INTEGER NOT NULL
+    )"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_node ON
+    node (model, x, y)"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS node_value (
+      node INTEGER NOT NULL REFERENCES node (id),
       layer INTEGER NOT NULL REFERENCES layer (id),
-      node INTEGER NOT NULL,
       variable INTEGER NOT NULL REFERENCES model_variable (id),
       value REAL NOT NULL
     )"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_node_value ON
+    node_value (layer, node, variable)"
   )
   dbClearResult(res)
 
@@ -169,6 +219,28 @@ connect_db <- function(path = ".") {
       center REAL NOT NULL,
       sd REAL NOT NULL
     )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS prediction (
+      pulse INTEGER NOT NULL REFERENCES pulse (id),
+      node INTEGER NOT NULL REFERENCES node (id),
+      distance REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_prediction ON
+    prediction (pulse, node)"
+  )
+  dbClearResult(res)
+  res <- dbSendQuery(
+    connection,
+    "CREATE INDEX IF NOT EXISTS idx_prediction_node ON
+    prediction (node)"
   )
   dbClearResult(res)
 
