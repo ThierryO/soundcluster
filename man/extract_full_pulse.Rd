@@ -27,6 +27,6 @@ wav <- sound_wav(
   te_factor = 10,
   max_length = 0.1
 )
-spectrogram <- wav2spectrogram(wav)
+spectrogram <- sound_spectrogram(wav)
 extract_full_pulse(spectrogram, min_peak_amplitude = 20, dimensions = 16)
 }

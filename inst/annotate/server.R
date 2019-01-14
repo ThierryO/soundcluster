@@ -182,7 +182,7 @@ shinyServer(function(input, output, session) {
         filename = meta$filename, channel = meta$channel,
         te_factor = meta$te_factor, max_length = meta$duration
       )
-      sonogram <- wav2spectrogram(
+      sonogram <- sound_spectrogram(
         wav = wav, window_ms = meta$window_ms, overlap = meta$overlap
       )
       sonogram@SpecGram$f <- sonogram@SpecGram$f / 1000

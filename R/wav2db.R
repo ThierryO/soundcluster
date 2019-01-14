@@ -8,7 +8,7 @@
 #' @param existing what to do with existing spectrograms. "append" will add new pulses. "skip" will skip the recording.
 #' @inheritParams base::list.files
 #' @inheritParams sound_wav
-#' @inheritParams wav2spectrogram
+#' @inheritParams sound_spectrogram
 #' @inheritParams extract_full_pulse
 #' @export
 #' @importFrom assertthat assert_that is.string is.flag noNA
@@ -80,7 +80,7 @@ wav2db <- function(
       te_factor = te_factor,
       max_length = max_length
     )
-    spectrogram <- wav2spectrogram(
+    spectrogram <- sound_spectrogram(
       wav = wav, window_ms = window_ms, overlap = overlap
     )
     rm(wav)

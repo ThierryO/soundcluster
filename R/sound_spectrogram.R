@@ -13,8 +13,8 @@
 #'   te_factor = 10,
 #'   max_length = 0.1
 #' )
-#' wav2spectrogram(wav)
-wav2spectrogram <- function(wav, window_ms = 1, overlap = 0.9){
+#' sound_spectrogram(wav)
+sound_spectrogram <- function(wav, window_ms = 1, overlap = 0.9){
   assert_that(
     inherits(wav, "soundWav"),
     is.number(window_ms),

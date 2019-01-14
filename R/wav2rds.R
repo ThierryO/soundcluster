@@ -5,7 +5,7 @@
 #' @param existing what to do with existing rds files. Options are `skip`, `append` and `overwrite`.
 #' @inheritParams base::list.files
 #' @inheritParams sound_wav
-#' @inheritParams wav2spectrogram
+#' @inheritParams sound_spectrogram
 #' @inheritParams extract_full_pulse
 #' @export
 #' @importFrom assertthat assert_that is.string is.flag
@@ -43,7 +43,7 @@ wav2rds <- function(
       te_factor = te_factor,
       max_length = max_length
     )
-    spectrogram <- wav2spectrogram(
+    spectrogram <- sound_spectrogram(
       wav = wav, window_ms = window_ms, overlap = overlap
     )
     pulses <- extract_full_pulse(
