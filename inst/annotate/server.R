@@ -89,13 +89,31 @@ shinyServer(function(input, output, session) {
         )
       )
 
-      data$spectrograms <- dbGetQuery(
+      data$current_spectrogram <- dbGetQuery(
         data$db@Connection,
-        "SELECT s.id, count(p.id) AS n_pulse
-        FROM spectrogram AS s LEFT JOIN pulse AS p on s.id = p.spectrogram
-        GROUP BY s.id
-        ORDER BY count(p.id) DESC"
-      )
+        "WITH cte_node AS (
+          SELECT pr.node, SUM(p.class IS NOT NULL) AS done
+          FROM pulse AS p INNER JOIN prediction AS pr ON p.id = pr.pulse
+          GROUP BY pr.node
+        ),
+        cte_spectrogram AS (
+          SELECT
+            p.spectrogram, pr.node, CAST(SUM(p.class IS NULL) AS REAL) AS to_do
+          FROM pulse AS p INNER JOIN prediction AS pr ON p.id = pr.pulse
+          GROUP BY p.spectrogram, pr.node
+        )
+
+        SELECT
+          cs.spectrogram,
+          SUM(cs.to_do / (1 + cn.done)) AS weight,
+          (CAST(random() AS REAL) + 9223372036854775808) /
+            (9223372036854775808 + 9223372036854775807) AS random
+        FROM cte_spectrogram AS cs
+        INNER JOIN cte_node AS cn ON cs.node = cn.node
+        GROUP BY cs.spectrogram
+        ORDER BY weight * random DESC
+        LIMIT 1"
+      )$spectrogram
     }
   )
 
