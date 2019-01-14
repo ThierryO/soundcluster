@@ -4,7 +4,8 @@
 \alias{sound_spectrogram}
 \title{Convert the output of read_wav to a spectrogram}
 \usage{
-sound_spectrogram(wav, window_ms = 1, overlap = 0.9)
+sound_spectrogram(wav, window_ms = 1, overlap = 0.9,
+  frequency_range = c(10000, 130000))
 }
 \arguments{
 \item{wav}{An object as created by \code{\link{sound_wav}}}
@@ -12,6 +13,8 @@ sound_spectrogram(wav, window_ms = 1, overlap = 0.9)
 \item{window_ms}{The size of the window in microseconds. Default to 1.}
 
 \item{overlap}{The overlap of two windows. Defaults to 0.9.}
+
+\item{frequency_range}{the range of frequencies to use in Hz. Frequencies below the minimum or above the maximum are removed from the spectrogram. Defaults to 10000 (10 kHz) and 130000 (130 kHz).}
 }
 \description{
 Convert the output of read_wav to a spectrogram

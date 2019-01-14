@@ -19,7 +19,8 @@ wav2db <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
   overlap = 0.9, threshold_amplitude = 10, min_peak_amplitude = 30,
-  dimensions = 32, existing = c("append", "skip")
+  dimensions = 32, existing = c("append", "skip"),
+  frequency_range = c(10000, 130000)
 ) {
   assert_that(
     inherits(db, "soundDatabase"),
@@ -43,7 +44,8 @@ wav2db <- function(
         "SELECT
           r.fingerprint, r.timestamp,
           d.serial, d.sample_rate,
-          s.window_ms, min(p.peak_amplitude) AS max_peak_amplitude
+          s.window_ms, s.min_frequency, s.max_frequency,
+          min(p.peak_amplitude) AS max_peak_amplitude
         FROM  device AS d
         INNER JOIN recording AS r ON r.device = d.id
         INNER JOIN spectrogram AS s ON s.recording = r.id
@@ -54,7 +56,8 @@ wav2db <- function(
           p.select_amplitude = %s AND
           p.peak_amplitude >= %s
         GROUP BY
-          r.fingerprint, r.timestamp, d.serial, d.sample_rate, s.window_ms",
+          r.fingerprint, r.timestamp, d.serial, d.sample_rate,
+          s.window_ms, s.min_frequency, s.max_frequency",
         dbQuoteString(db@Connection, path),
         dbQuoteString(db@Connection, make),
         dbQuoteString(db@Connection, model),
@@ -81,7 +84,8 @@ wav2db <- function(
       max_length = max_length
     )
     spectrogram <- sound_spectrogram(
-      wav = wav, window_ms = window_ms, overlap = overlap
+      wav = wav, window_ms = window_ms, overlap = overlap,
+      frequency_range = frequency_range
     )
     rm(wav)
     junk <- gc(FALSE)
@@ -188,6 +192,8 @@ wav2db <- function(
           recording = recording_id$id,
           window_ms = window_ms,
           overlap = overlap,
+          min_frequency = min(frequency_range),
+          max_frequency = max(frequency_range),
           stringsAsFactors = FALSE
         ),
         append = TRUE
@@ -262,7 +268,8 @@ wav2db <- function(
     te_factor = te_factor,
     max_length = max_length,
     window_ms = window_ms,
-    overlap = overlap
+    overlap = overlap,
+    frequency_range = frequency_range
   )
 }
 

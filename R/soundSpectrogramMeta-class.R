@@ -30,6 +30,8 @@ setValidity(
       has_name(object@Spectrogram, "fingerprint"),
       has_name(object@Spectrogram, "window_ms"),
       has_name(object@Spectrogram, "overlap"),
+      has_name(object@Spectrogram, "min_frequency"),
+      has_name(object@Spectrogram, "max_frequency"),
       has_name(object@Spectrogram, "recording")
     )
     assert_that(
@@ -37,6 +39,8 @@ setValidity(
       inherits(object@Spectrogram$window_ms, "numeric"),
       inherits(object@Spectrogram$overlap, "numeric"),
       inherits(object@Spectrogram$recording, "character"),
+      inherits(object@Spectrogram$min_frequency, "numeric"),
+      inherits(object@Spectrogram$max_frequency, "numeric"),
       noNA(object@Spectrogram)
     )
     if (anyDuplicated(object@Spectrogram$fingerprint) > 0) {
@@ -50,6 +54,12 @@ setValidity(
     }
     if (any(object@Spectrogram$overlap >= 1)) {
       stop("spectrogram overlap must be smaller than 1")
+    }
+    if (any(object@Spectrogram$min_frequency < 0)) {
+      stop("spectrogram min_frequency must be positive")
+    }
+    if (any(object@Spectrogram$min_frequency < 0)) {
+      stop("spectrogram min_frequency must be positive")
     }
 
     if (!all(object@Spectrogram$recording %in% object@Recording$fingerprint)) {

@@ -50,7 +50,9 @@ connect_db <- function(path = ".") {
       fingerprint TEXT NOT NULL UNIQUE,
       recording INTEGER NOT NULL REFERENCES recording (id),
       window_ms REAL NOT NULL,
-      overlap REAL NOT NULL
+      overlap REAL NOT NULL,
+      min_frequency REAL NOT NULL,
+      max_frequency REAL NOT NULL
     )"
   )
   dbClearResult(res)
