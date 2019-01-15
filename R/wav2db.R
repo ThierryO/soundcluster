@@ -11,11 +11,22 @@
 #' @inheritParams sound_spectrogram
 #' @inheritParams extract_full_pulse
 #' @export
+wav2db <- function(
+  db, path, recursive = TRUE, make, model, serial = NA_character_,
+  te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
+  overlap = 0.9, threshold_amplitude = 10, min_peak_amplitude = 30,
+  dimensions = 32, existing = c("append", "skip"),
+  frequency_range = c(10000, 130000)
+) {
+  UseMethod("wav2db", db)
+}
+
+#' @export
 #' @importFrom assertthat assert_that is.string is.flag noNA
 #' @importFrom utils file_test flush.console
 #' @importFrom parallel mclapply detectCores
 #' @importFrom RSQLite dbQuoteString dbGetQuery dbWriteTable dbSendQuery dbClearResult dbRemoveTable dbQuoteLiteral
-wav2db <- function(
+wav2db.soundDatabase <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
   overlap = 0.9, threshold_amplitude = 10, min_peak_amplitude = 30,
@@ -244,7 +255,7 @@ wav2db <- function(
       dbRemoveTable(conn = db@Connection, name = "staging_pyramid")
     }
 
-    return(TRUE)
+    return(invisible(path))
   } else if (!file_test("-d", path)) {
     stop("path must be an existing file or directory")
   }
@@ -269,8 +280,86 @@ wav2db <- function(
     max_length = max_length,
     window_ms = window_ms,
     overlap = overlap,
+    existing = existing,
     frequency_range = frequency_range
   )
+  return(invisible(wavs))
+}
+
+#' @export
+#' @importFrom assertthat assert_that is.string is.flag
+#' @importFrom utils file_test
+wav2db.character <- function(
+  db, path, recursive = TRUE, make, model, serial = NA_character_,
+  te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
+  overlap = 0.9, threshold_amplitude = 10, min_peak_amplitude = 30,
+  dimensions = 32, existing = c("append", "skip"),
+  frequency_range = c(10000, 130000)
+) {
+  assert_that(
+    is.string(path)
+  )
+  if (file_test("-f", path)) {
+    wav2db(
+      db = connect_db(path = db),
+      path = path,
+      make = make,
+      model = model,
+      serial = serial,
+      threshold_amplitude = threshold_amplitude,
+      min_peak_amplitude = min_peak_amplitude,
+      dimensions = dimensions,
+      channel = channel,
+      te_factor = te_factor,
+      max_length = max_length,
+      window_ms = window_ms,
+      overlap = overlap,
+      frequency_range = frequency_range
+    )
+    return(invisible(path))
+  } else if (!file_test("-d", path)) {
+    stop("path must be an existing file or directory")
+  }
+  assert_that(is.flag(recursive))
+  wavs <- list.files(
+    path = path,
+    pattern = "\\.[Ww][Aa][Vv]$",
+    recursive = recursive,
+    full.names = TRUE
+  )
+  if (requireNamespace("littler", quietly = TRUE)) {
+    cmds <- sprintf(
+      "r -e 'soundcluster::wav2db(
+      path = \"%s\", db = \"%s\", threshold_amplitude = %f,
+      min_peak_amplitude = %f, dimensions = %i, channel = \"%s\",
+      te_factor = %f, max_length = %f, window_ms = %f, overlap = %f,
+      existing = \"%s\", frequency_range = c(\"%f, %f\"))'",
+      sample(wavs), db, threshold_amplitude, min_peak_amplitude, dimensions,
+      channel, te_factor, max_length, window_ms, overlap, existing,
+      min(frequency_range), max(frequency_range)
+    )
+    lapply(cmds, system)
+  } else {
+    lapply(
+      sample(wavs),
+      wav2db,
+      db = db,
+      make = make,
+      model = model,
+      serial = serial,
+      threshold_amplitude = threshold_amplitude,
+      min_peak_amplitude = min_peak_amplitude,
+      dimensions = dimensions,
+      channel = channel,
+      te_factor = te_factor,
+      max_length = max_length,
+      window_ms = window_ms,
+      overlap = overlap,
+      existing = existing,
+      frequency_range = frequency_range
+    )
+  }
+  return(invisible(wavs))
 }
 
 #' @importFrom utils tail
