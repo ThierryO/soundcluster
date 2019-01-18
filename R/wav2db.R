@@ -299,6 +299,8 @@ wav2db.character <- function(
   assert_that(
     is.string(path)
   )
+  channel <- match.arg(channel)
+  existing <- match.arg(existing)
   if (file_test("-f", path)) {
     wav2db(
       db = connect_db(path = db),
@@ -333,10 +335,12 @@ wav2db.character <- function(
       path = \"%s\", db = \"%s\", threshold_amplitude = %f,
       min_peak_amplitude = %f, dimensions = %i, channel = \"%s\",
       te_factor = %f, max_length = %f, window_ms = %f, overlap = %f,
-      existing = \"%s\", frequency_range = c(\"%f, %f\"))'",
+      existing = \"%s\", frequency_range = c(%f, %f), make = \"%s\",
+      model = \"%s\"%s)'",
       sample(wavs), db, threshold_amplitude, min_peak_amplitude, dimensions,
       channel, te_factor, max_length, window_ms, overlap, existing,
-      min(frequency_range), max(frequency_range)
+      min(frequency_range), max(frequency_range), make, model,
+      ifelse(is.na(serial), "", paste0(", serial = \"", serial, "\""))
     )
     lapply(cmds, system)
   } else {
