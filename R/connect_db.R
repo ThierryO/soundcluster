@@ -87,7 +87,10 @@ connect_db <- function(path = ".") {
       abbreviation TEXT NOT NULL UNIQUE,
       description TEXT,
       species INTEGER REFERENCES species (id),
-      behaviour INTEGER REFERENCES behaviour (id)
+      behaviour INTEGER REFERENCES behaviour (id),
+      colour TEXT DEFAULT 'black',
+      linetype TEXT DEFAULT 'solid',
+      angle INTEGER DEFAULT 45
     )"
   )
   dbClearResult(res)
