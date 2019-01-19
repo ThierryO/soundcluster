@@ -10,7 +10,7 @@ sound_pyramid(x, ...)
 
 \method{sound_pyramid}{soundPulse}(x, end_frequency = c(10, Inf), ...)
 
-\method{sound_pyramid}{soundDatabase}(x, spectrogram, ...)
+\method{sound_pyramid}{soundDatabase}(x, spectrogram, n, ...)
 }
 \arguments{
 \item{x}{the object}
@@ -19,7 +19,9 @@ sound_pyramid(x, ...)
 
 \item{end_frequency}{a vector of length 2 defining the lower and upper boundary for the end frequency of relevant pulses}
 
-\item{spectrogram}{an optional spectrogram fingerprint}
+\item{spectrogram}{an optional spectrogram id}
+
+\item{n}{the optimal sample size. If \code{n} is not set, then the entire set will be returned}
 }
 \description{
 \itemize{
