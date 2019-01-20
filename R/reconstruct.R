@@ -163,14 +163,16 @@ reconstruct.soundCluster <- function(x, ...) {
 #' @export
 #' @importFrom assertthat assert_that is.string
 #' @importFrom methods validObject
+#' @importFrom pool poolCheckout poolReturn
 #' @importFrom RSQLite dbGetQuery
 #' @importFrom raster merge
 reconstruct.soundDatabase <- function(x, ..., spectrogram) {
   assert_that(is.string(spectrogram))
   validObject(x)
+  connection <- poolCheckout(x@Connection)
 
   pulse <- dbGetQuery(
-    x@Connection,
+    connection,
     sprintf(
       "SELECT
         p.id, p.peak_amplitude, p.start_amplitude, p.start_time, p.end_time,
@@ -178,19 +180,19 @@ reconstruct.soundDatabase <- function(x, ..., spectrogram) {
       FROM spectrogram AS s INNER JOIN pulse AS p ON s.id = p.spectrogram
       WHERE s.fingerprint = %s
       ORDER BY p.id",
-      dbQuoteString(x@Connection, spectrogram)
+      dbQuoteString(connection, spectrogram)
     )
   )
   pulse$shape <- lapply(
     pulse$id,
     function(id) {
       pyramid <- dbGetQuery(
-        x@Connection,
+        connection,
         sprintf(
           "SELECT quadrant, value
           FROM pyramid
           WHERE pulse = %s",
-          dbQuoteLiteral(x@Connection, id)
+          dbQuoteLiteral(connection, id)
         )
       )
       z <- pyramid$value
@@ -203,5 +205,7 @@ reconstruct.soundDatabase <- function(x, ..., spectrogram) {
     raster_pulse[[1]] <- merge(raster_pulse[[1]], raster_pulse[[2]])
     raster_pulse[[2]] <- NULL
   }
+  poolReturn(connection)
+
   return(raster_pulse[[1]])
 }

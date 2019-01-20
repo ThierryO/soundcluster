@@ -5,7 +5,8 @@
 #' @export
 #' @importFrom assertthat assert_that is.string
 #' @importFrom utils file_test
-#' @importFrom RSQLite dbConnect SQLite dbSendQuery dbClearResult
+#' @importFrom pool dbPool poolCheckout poolReturn
+#' @importFrom RSQLite SQLite dbSendQuery dbClearResult
 connect_db <- function(path = ".") {
   assert_that(
     is.string(path),
@@ -13,7 +14,8 @@ connect_db <- function(path = ".") {
   )
 
   db <- file.path(path, "soundcluster.sqlite")
-  connection <- dbConnect(SQLite(), dbname = db)
+  pool <- dbPool(drv = SQLite(), dbname = db)
+  connection <- poolCheckout(pool)
 
   res <- dbSendQuery(
     connection,
@@ -249,5 +251,6 @@ connect_db <- function(path = ".") {
   )
   dbClearResult(res)
 
-  new("soundDatabase", Connection = connection)
+  poolReturn(connection)
+  new("soundDatabase", Connection = pool)
 }

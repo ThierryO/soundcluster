@@ -19,15 +19,16 @@ Imports:
   kohonen,
   methods,
   parallel,
+  pool,
   raster,
   RSQLite,
+  shiny,
   signal,
   tuneR,
   utils
 Suggests:
   igraph,
-  littler,
-  shiny
+  littler
 Collate: 
     'connect_db.R'
     'extract_full_pulse.R'
@@ -49,6 +50,7 @@ Collate:
     'sound_pyramid.R'
     'sound_spectrogram.R'
     'sound_wav.R'
+    'start_label.R'
     'vif.R'
     'wav2db.R'
     'wav2rds.R'

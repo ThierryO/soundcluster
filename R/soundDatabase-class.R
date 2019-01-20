@@ -14,46 +14,50 @@
 setClass(
   "soundDatabase",
   representation = representation(
-    Connection = "SQLiteConnection"
+    Connection = "Pool"
   )
 )
 
 #' @importFrom methods setValidity
+#' @importFrom pool poolCheckout poolReturn
 #' @importFrom assertthat assert_that
 #' @importFrom RSQLite dbListTables dbListFields
 setValidity(
   "soundDatabase",
   function(object){
+    connection <- poolCheckout(object@Connection)
     assert_that(
+      inherits(connection, "SQLiteConnection"),
       all(
         c("device", "pulse", "pyramid", "recording", "spectrogram") %in%
-          dbListTables(object@Connection)
+          dbListTables(connection)
       ),
       all(
         c("id", "make", "model", "serial", "sample_rate", "te_factor",
           "left_channel") %in%
-          dbListFields(object@Connection, "device")
+          dbListFields(connection, "device")
       ),
       all(
         c("id", "fingerprint", "spectrogram", "peak_time", "peak_frequency",
           "peak_amplitude", "start_time", "start_frequency", "start_amplitude",
           "end_time", "end_frequency", "select_amplitude") %in%
-          dbListFields(object@Connection, "pulse")
+          dbListFields(connection, "pulse")
       ),
       all(
         c("pulse", "quadrant", "value") %in%
-          dbListFields(object@Connection, "pyramid")
+          dbListFields(connection, "pyramid")
       ),
       all(
         c("id", "fingerprint", "timestamp", "duration", "total_duration",
           "device", "filename") %in%
-          dbListFields(object@Connection, "recording")
+          dbListFields(connection, "recording")
       ),
       all(
         c("id", "fingerprint", "recording", "window_ms", "overlap") %in%
-          dbListFields(object@Connection, "spectrogram")
+          dbListFields(connection, "spectrogram")
       )
     )
+    poolReturn(connection)
     return(TRUE)
   }
 )

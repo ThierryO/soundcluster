@@ -40,8 +40,12 @@ sound_cluster.soundPyramid <- function(x, grid_dim = c(8, 10), ...) {
 }
 
 #' @export
+#' @importFrom methods validObject
+#' @importFrom pool poolCheckout poolReturn
+#' @importFrom RSQLite dbWriteTable dbGetQuery dbSendQuery dbClearResult dbRemoveTable
 sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   validObject(x)
+  connection <- poolCheckout(x@Connection)
 
   message("Reading data from database")
   pyramids <- sound_pyramid(x, ...)
@@ -52,7 +56,7 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   message("Storing cluster")
 
   dbWriteTable(
-    x@Connection,
+    connection,
     name = "model",
     data.frame(
       grid_x = cluster@Network$grid$xdim,
@@ -60,10 +64,10 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     ),
     append = TRUE
   )
-  model_id <- dbGetQuery(x@Connection, "SELECT max(id) AS id FROM model")$id
+  model_id <- dbGetQuery(connection, "SELECT max(id) AS id FROM model")$id
 
   dbWriteTable(
-    x@Connection,
+    connection,
     "staging_variable",
     data.frame(
       name = rownames(cluster@Scaling),
@@ -71,22 +75,22 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     )
   )
   res <- dbSendQuery(
-    x@Connection,
+    connection,
     "INSERT OR IGNORE INTO model_variable (name)
     SELECT name FROM staging_variable"
   )
   dbClearResult(res)
   model_variable <- dbGetQuery(
-    x@Connection,
+    connection,
     "SELECT mv.id AS variable, mv.name
     FROM model_variable AS mv
     INNER JOIN staging_variable AS sv ON mv.name = sv.name"
   )
-  dbRemoveTable(x@Connection, "staging_variable")
+  dbRemoveTable(connection, "staging_variable")
   rownames(model_variable) <- model_variable$name
 
   dbWriteTable(
-    x@Connection,
+    connection,
     "staging_model_pulse",
     data.frame(
       model = model_id,
@@ -95,7 +99,7 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     )
   )
   res <- dbSendQuery(
-    x@Connection,
+    connection,
     "INSERT OR IGNORE INTO model_pulse (pulse, model)
     SELECT p.id AS pulse, smp.model
     FROM pulse AS p
@@ -103,17 +107,17 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     ORDER BY p.id"
   )
   dbClearResult(res)
-  dbRemoveTable(x@Connection, "staging_model_pulse")
+  dbRemoveTable(connection, "staging_model_pulse")
 
   scaling <- as.data.frame(cluster@Scaling)
   scaling$name <- rownames(cluster@Scaling)
   scaling <- merge(scaling, model_variable, by = "name")
   scaling$name <- NULL
   scaling$model <- model_id
-  dbWriteTable(x@Connection, "scaling", scaling, append = TRUE)
+  dbWriteTable(connection, "scaling", scaling, append = TRUE)
 
   dbWriteTable(
-    x@Connection,
+    connection,
     name = "layer",
     data.frame(
       model = model_id,
@@ -122,16 +126,16 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     append = TRUE
   )
   layer_id <- dbGetQuery(
-    x@Connection,
+    connection,
     sprintf(
       "SELECT id FROM layer WHERE model = %s",
-      dbQuoteLiteral(x@Connection, model_id)
+      dbQuoteLiteral(connection, model_id)
     )
   )$id
 
   node_id <- as.integer(gsub("V", "", rownames(cluster@Network$codes[[1]])))
   dbWriteTable(
-    x@Connection,
+    connection,
     "staging_node",
     data.frame(
       model = model_id,
@@ -140,24 +144,24 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     )
   )
   res <- dbSendQuery(
-    x@Connection,
+    connection,
     "INSERT OR IGNORE INTO node (model, x, y)
     SELECT model, x, y
     FROM staging_node"
   )
   dbClearResult(res)
-  dbRemoveTable(x@Connection, "staging_node")
+  dbRemoveTable(connection, "staging_node")
   node_id <- dbGetQuery(
-    x@Connection,
+    connection,
     sprintf(
       "SELECT id FROM node WHERE model = %s ORDER BY x, y",
-      dbQuoteLiteral(x@Connection, model_id)
+      dbQuoteLiteral(connection, model_id)
     )
   )$id
 
   for (i in seq_along(layer_id)) {
     dbWriteTable(
-      x@Connection,
+      connection,
       "node_value",
       data.frame(
         layer = layer_id[i],
@@ -175,7 +179,7 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   }
 
   dbWriteTable(
-    x@Connection,
+    connection,
     "staging_prediction",
     data.frame(
       fingerprint = rownames(cluster@Network$data[[1]]),
@@ -185,7 +189,7 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     )
   )
   res <- dbSendQuery(
-    x@Connection,
+    connection,
     "INSERT OR IGNORE INTO prediction (pulse, node, distance)
     SELECT p.id AS pulse, sp.node, sp.distance
     FROM staging_prediction AS sp
@@ -193,7 +197,9 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
     ORDER BY p.id"
   )
   dbClearResult(res)
-  dbRemoveTable(x@Connection, "staging_prediction")
+  dbRemoveTable(connection, "staging_prediction")
+
+  poolReturn(connection)
 
   return(invisible(NULL))
 }

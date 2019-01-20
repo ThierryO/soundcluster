@@ -86,19 +86,21 @@ sound_pyramid.soundPulse <- function(x, end_frequency = c(10, Inf), ...) {
 #' @param spectrogram an optional spectrogram id
 #' @param n the optimal sample size. If `n` is not set, then the entire set will be returned
 #' @importFrom methods validObject
+#' @importFrom pool poolCheckout poolReturn
 #' @importFrom assertthat assert_that is.count
 #' @importFrom RSQLite dbGetQuery dbQuoteLiteral
 #' @importFrom stats sd
 #' @export
 sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
   validObject(x)
+  connection <- poolCheckout(x@Connection)
 
   if (missing(n)) {
     sample_sql <- ""
   } else {
     sample_sql <- sprintf(
       "ORDER BY random() LIMIT %s",
-      dbQuoteLiteral(x@Connection, n)
+      dbQuoteLiteral(connection, n)
     )
   }
   if (missing(spectrogram)) {
@@ -107,7 +109,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     assert_that(is.count(spectrogram))
     where_sql <- sprintf(
       "spectrogram = %s",
-      dbQuoteLiteral(x@Connection, spectrogram)
+      dbQuoteLiteral(connection, spectrogram)
     )
   }
   where_sql <- paste(where_sql, collapse = " AND ")
@@ -124,7 +126,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     where_sql,
     sample_sql
   )
-  res <- dbSendQuery(x@Connection, staging_sql)
+  res <- dbSendQuery(connection, staging_sql)
   dbClearResult(res)
 
   sql <- sprintf(
@@ -142,7 +144,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     ORDER BY p.id",
     staging_table
   )
-  pulses <- dbGetQuery(x@Connection, sql)
+  pulses <- dbGetQuery(connection, sql)
   fingerprint <- pulses$fingerprint
   pulses$fingerprint <- NULL
 
@@ -160,9 +162,9 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
       WHERE py.quadrant = %s
       ORDER BY py.pulse",
       staging_table,
-      dbQuoteLiteral(x@Connection, i - 1)
+      dbQuoteLiteral(connection, i - 1)
     )
-    extra <- dbGetQuery(x@Connection, sql)
+    extra <- dbGetQuery(connection, sql)
     if (nrow(extra) < nrow(pulses)) {
       pyramid <- pyramid[, seq_len(i - 1), drop = FALSE]
       break
@@ -187,7 +189,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     INNER JOIN %s AS sp ON p.id = sp.id",
     staging_table
   )
-  pulse_spectrogram <- dbGetQuery(x@Connection, sql)
+  pulse_spectrogram <- dbGetQuery(connection, sql)
 
   sql <- sprintf(
     "WITH cte_spectrogram AS (
@@ -206,7 +208,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     INNER JOIN recording AS r ON s.recording = r.id",
     staging_table
   )
-  spectrogram_meta <- dbGetQuery(x@Connection, sql)
+  spectrogram_meta <- dbGetQuery(connection, sql)
 
   sql <- sprintf(
     "WITH cte_spectrogram AS (
@@ -231,10 +233,11 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     INNER JOIN device AS d ON r.device = d.id",
     staging_table
   )
-  recording <- dbGetQuery(x@Connection, sql)
+  recording <- dbGetQuery(connection, sql)
   recording$timestamp <- as.POSIXct(recording$timestamp, origin = "1970-01-01")
   recording$left_channel <- as.logical(recording$left_channel)
 
+  poolReturn(connection)
   new(
     "soundPyramid",
     Pyramid = pyramid,

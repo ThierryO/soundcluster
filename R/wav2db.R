@@ -25,6 +25,7 @@ wav2db <- function(
 #' @importFrom assertthat assert_that is.string is.flag noNA
 #' @importFrom utils file_test flush.console
 #' @importFrom parallel mclapply detectCores
+#' @importFrom pool poolCheckout poolReturn
 #' @importFrom RSQLite dbQuoteString dbGetQuery dbWriteTable dbSendQuery dbClearResult dbRemoveTable dbQuoteLiteral
 wav2db.soundDatabase <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
@@ -49,8 +50,9 @@ wav2db.soundDatabase <- function(
   if (file_test("-f", path)) {
     message(path)
     flush.console()
+    connection <- poolCheckout(db@Connection)
     available <- dbGetQuery(
-      db@Connection,
+      connection,
       sprintf(
         "SELECT
           r.fingerprint, r.timestamp,
@@ -69,14 +71,14 @@ wav2db.soundDatabase <- function(
         GROUP BY
           r.fingerprint, r.timestamp, d.serial, d.sample_rate,
           s.window_ms, s.min_frequency, s.max_frequency",
-        dbQuoteString(db@Connection, path),
-        dbQuoteString(db@Connection, make),
-        dbQuoteString(db@Connection, model),
-        dbQuoteLiteral(db@Connection, te_factor),
-        dbQuoteLiteral(db@Connection, window_ms),
-        dbQuoteLiteral(db@Connection, overlap),
-        dbQuoteLiteral(db@Connection, threshold_amplitude),
-        dbQuoteLiteral(db@Connection, min_peak_amplitude)
+        dbQuoteString(connection, path),
+        dbQuoteString(connection, make),
+        dbQuoteString(connection, model),
+        dbQuoteLiteral(connection, te_factor),
+        dbQuoteLiteral(connection, window_ms),
+        dbQuoteLiteral(connection, overlap),
+        dbQuoteLiteral(connection, threshold_amplitude),
+        dbQuoteLiteral(connection, min_peak_amplitude)
       )
     )
     if (nrow(available) > 0) {
@@ -124,23 +126,23 @@ wav2db.soundDatabase <- function(
         "SELECT id
         FROM device
         WHERE make = %s AND model = %s AND serial IS NULL",
-        dbQuoteString(db@Connection, make),
-        dbQuoteString(db@Connection, model)
+        dbQuoteString(connection, make),
+        dbQuoteString(connection, model)
       )
     } else {
       sql <- sprintf(
         "SELECT id
         FROM device
         WHERE make = %s AND model = %s AND serial = %s",
-        dbQuoteString(db@Connection, make),
-        dbQuoteString(db@Connection, model),
-        dbQuoteString(db@Connection, serial)
+        dbQuoteString(connection, make),
+        dbQuoteString(connection, model),
+        dbQuoteString(connection, serial)
       )
     }
-    device_id <- dbGetQuery(conn = db@Connection, sql)
+    device_id <- dbGetQuery(conn = connection, sql)
     if (nrow(device_id) == 0) {
       dbWriteTable(
-        conn = db@Connection,
+        conn = connection,
         name = "device",
         value = data.frame(
           make = make,
@@ -153,19 +155,19 @@ wav2db.soundDatabase <- function(
         ),
         append = TRUE
       )
-      device_id <- dbGetQuery(conn = db@Connection, sql)
+      device_id <- dbGetQuery(conn = connection, sql)
     }
 
     recording_id <- dbGetQuery(
-      db@Connection,
+      connection,
       sprintf(
         "SELECT id FROM recording WHERE fingerprint = %s",
-        dbQuoteString(db@Connection, pulses@Recording$fingerprint)
+        dbQuoteString(connection, pulses@Recording$fingerprint)
       )
     )
     if (nrow(recording_id) == 0) {
       dbWriteTable(
-        db@Connection,
+        connection,
         name = "recording",
         value = data.frame(
           fingerprint = pulses@Recording$fingerprint,
@@ -179,24 +181,24 @@ wav2db.soundDatabase <- function(
         append = TRUE
       )
       recording_id <- dbGetQuery(
-        db@Connection,
+        connection,
         sprintf(
           "SELECT id FROM recording WHERE fingerprint = %s",
-          dbQuoteString(db@Connection, pulses@Recording$fingerprint)
+          dbQuoteString(connection, pulses@Recording$fingerprint)
         )
       )
     }
 
     spectrogram_id <- dbGetQuery(
-      db@Connection,
+      connection,
       sprintf(
         "SELECT id FROM spectrogram WHERE fingerprint = %s",
-        dbQuoteString(db@Connection, pulses@Spectrogram$fingerprint)
+        dbQuoteString(connection, pulses@Spectrogram$fingerprint)
       )
     )
     if (nrow(spectrogram_id) == 0) {
       dbWriteTable(
-        conn = db@Connection,
+        conn = connection,
         name = "spectrogram",
         value = data.frame(
           fingerprint = pulses@Spectrogram$fingerprint,
@@ -210,17 +212,17 @@ wav2db.soundDatabase <- function(
         append = TRUE
       )
       spectrogram_id <- dbGetQuery(
-        db@Connection,
+        connection,
         sprintf(
           "SELECT id FROM spectrogram WHERE fingerprint = %s",
-          dbQuoteString(db@Connection, pulses@Spectrogram$fingerprint)
+          dbQuoteString(connection, pulses@Spectrogram$fingerprint)
         )
       )
     }
 
     if (nrow(pulses@Pulse) > 0) {
       dbWriteTable(
-        conn = db@Connection,
+        conn = connection,
         name = "pulse",
         value = data.frame(
           fingerprint = pulses@Pulse$fingerprint,
@@ -240,21 +242,22 @@ wav2db.soundDatabase <- function(
       )
 
       dbWriteTable(
-        conn = db@Connection,
+        conn = connection,
         name = "staging_pyramid",
         value = pyramid
       )
       res <- dbSendQuery(
-        db@Connection,
+        connection,
         "INSERT INTO pyramid (pulse, quadrant, value)
         SELECT p.id AS pulse, sp.quadrant, sp.value
         FROM staging_pyramid AS sp
         INNER JOIN pulse AS p ON sp.pulse = p.fingerprint"
       )
       dbClearResult(res)
-      dbRemoveTable(conn = db@Connection, name = "staging_pyramid")
+      dbRemoveTable(conn = connection, name = "staging_pyramid")
     }
 
+    poolReturn(connection)
     return(invisible(path))
   } else if (!file_test("-d", path)) {
     stop("path must be an existing file or directory")
