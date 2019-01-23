@@ -5,8 +5,17 @@ shinyUI(
     title = "Soundcluster",
     tabPanel(
       "Spectrograms",
-      actionButton("dt_refresh", "Refresh"),
+      actionButton("dt_refresh", "Display all spectrograms"),
       DT::dataTableOutput("dt_spectrogram")
+    ),
+    tabPanel(
+      "Validate model",
+      actionButton("refresh_model", "Display all models"),
+      selectizeInput(
+        "node_model", label = "Model", choices = character(0), width = "400px"
+      ),
+      DT::dataTableOutput("dt_node_quality"),
+      DT::dataTableOutput("dt_node_quality_spectrogram")
     ),
     tabPanel(
       "Check pulses",

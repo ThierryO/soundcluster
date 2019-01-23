@@ -4,30 +4,12 @@ library(pool)
 library(RSQLite)
 library(raster)
 
-pool <- connect_db(path = Sys.getenv("LABEL_PATH"))@Connection
-onStop(function() {
-  poolClose(pool)
-})
-
-find_start <- function(data, input) {
-  start <- mean(
-    c(
-      data$pulse$start_time[data$current_pulse],
-      data$pulse$end_time[data$current_pulse]
-    )
-  ) - 0.5 * input$timeinterval
-  start <- pmin(
-    pmax(0, start),
-    data$maximum - input$timeinterval
-  )
-  floor(start)
-}
-
 shinyServer(function(input, output, session) {
   data <- reactiveValues(
     clamped = NULL,
     current_pulse = NULL,
     maximum = NULL,
+    nodes = NULL,
     pulse = NULL,
     sonogram = NULL,
     spectrograms = NULL,
@@ -35,54 +17,7 @@ shinyServer(function(input, output, session) {
   )
 
   observeEvent(input$dt_refresh, {
-    behaviour <- dbGetQuery(
-      pool,
-      "SELECT id, name FROM behaviour ORDER BY name"
-    )
-    updateSelectInput(
-      session,
-      "behaviour",
-      choices = c(
-        setNames(behaviour$id, behaviour$name),
-        "[no behaviour]" = "0", "[new behaviour]" = "-1"
-      ),
-      selected = "0"
-    )
-
-    species <- dbGetQuery(
-      pool,
-      "SELECT id, name FROM species ORDER BY name"
-    )
-    updateSelectInput(
-      session,
-      "species",
-      choices = c(
-        setNames(species$id, species$name),
-        "[no species]" = "0", "[new species]" = "-1"
-      ),
-      selected = "0"
-    )
-    updateSelectInput(
-      session,
-      "species_parent",
-      choices = c(setNames(species$id, species$name), "[no parent]" = "0"),
-      selected = "0"
-    )
-
-    class <- dbGetQuery(
-      pool,
-      "SELECT id, abbreviation
-      FROM class ORDER BY abbreviation"
-    )
-    updateSelectInput(
-      session,
-      "class_id",
-      choices = c(
-        setNames(class$id, class$abbreviation),
-        "[no class]" = "0", "[new class]" = "-1"
-      )
-    )
-
+    set_dropdown(session = session, pool = pool)
     dbGetQuery(
       pool,
       "WITH cte_pulse AS (
@@ -104,6 +39,72 @@ shinyServer(function(input, output, session) {
     ) -> data$spectrograms
   })
 
+  observeEvent(input$refresh_model, {
+    set_dropdown(session = session, pool = pool)
+    dbGetQuery(
+      pool,
+      "WITH cte_model AS (
+        SELECT
+          m.id, m.grid_x, m.grid_y,
+          COUNT(pr.pulse) AS predictions
+        FROM model AS m
+        INNER JOIN node AS n ON m.id = n.model
+        LEFT JOIN prediction AS pr ON n.id = pr.node
+        GROUP BY m.id, m.grid_x, m.grid_y
+      )
+
+      SELECT
+        id,
+        id || ': ' || grid_x || 'x' || grid_y || ' (' || predictions || ')'
+          AS label
+      FROM cte_model
+      ORDER BY id"
+    ) -> models
+
+    updateSelectInput(
+      session,
+      "node_model",
+      choices = setNames(models$id, models$label),
+      selected = head(models$id, 1)
+    )
+  })
+
+  observeEvent(input$node_model, {
+    if (input$node_model == "") {
+      return(NULL)
+    }
+    connection <- poolCheckout(pool)
+    sql <- sprintf(
+      "SELECT
+        n.id AS node, n.x, n.y,
+        COUNT(pr.pulse) AS pulses,
+        SUM(p.class IS NULL) AS unlabeled,
+        ROUND(MIN(distance), 2) AS min_dist,
+        ROUND(MAX(distance), 2) AS max_dist
+      FROM prediction AS pr
+      INNER JOIN node AS n ON pr.node = n.id
+      INNER JOIN pulse AS p on pr.pulse = p.id
+      WHERE n.model = %s
+      GROUP BY n.id, n.x, n.y
+      ORDER BY max_dist DESC",
+      dbQuoteLiteral(
+        connection,
+        input$node_model
+      )
+    )
+    dbGetQuery(connection, sql) -> data$nodes
+    poolReturn(connection)
+
+    output$dt_node_quality <- DT::renderDataTable(
+      DT::datatable(
+        data$nodes,
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
+  })
+
   observeEvent(data$spectrograms, {
     if (is.null(data$spectrograms)) {
       return(NULL)
@@ -118,86 +119,72 @@ shinyServer(function(input, output, session) {
     )
   })
 
+  observeEvent(input$dt_node_quality_rows_selected, {
+    if (is.null(input$dt_node_quality_rows_selected)) {
+      return(NULL)
+    }
+
+    connection <- poolCheckout(pool)
+    sql <- sprintf(
+      "WITH cte_spectrogram AS (
+        SELECT
+          p.spectrogram,
+          COUNT(pr.pulse) AS predictions,
+          MIN(pr.distance) AS min_dist,
+          MAX(pr.distance) AS max_dist
+        FROM prediction AS pr
+        INNER JOIN pulse AS p ON pr.pulse = p.id
+        WHERE pr.node = %s
+        GROUP BY p.spectrogram
+      )
+
+      SELECT
+        s.id AS spectrogram, s.fingerprint, cs.predictions, cs.min_dist, cs.max_dist,
+        ROUND(r.duration, 2) AS duration,
+        ROUND(r.duration / r.total_duration, 2) AS fraction,
+        d.make || ' ' || d.model || COALESCE(' ' || d.serial, '') AS device,
+        r.filename
+      FROM cte_spectrogram AS cs
+      INNER JOIN spectrogram AS s ON cs.spectrogram = s.id
+      INNER JOIN recording AS r ON s.recording = r.id
+      INNER JOIN device AS d ON r.device = d.id
+      ORDER BY max_dist DESC
+      ",
+      dbQuoteLiteral(
+        connection,
+        data$nodes$node[input$dt_node_quality_rows_selected]
+      )
+    )
+    dbGetQuery(connection, sql) -> data$spectrograms
+    poolReturn(connection)
+
+    output$dt_node_quality_spectrogram <- DT::renderDataTable(
+      DT::datatable(
+        data$spectrograms[, -1:-2],
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
+  })
+
+  observeEvent(input$dt_node_quality_spectrogram_rows_selected, {
+    if (is.null(input$dt_node_quality_spectrogram_rows_selected)) {
+      return(NULL)
+    }
+    data <- set_pulses(
+      session = session, pool = pool, data = data, input = input,
+      spectrogram = input$dt_node_quality_spectrogram_rows_selected
+    )
+  })
+
   observeEvent(input$dt_spectrogram_rows_selected, {
     if (is.null(input$dt_spectrogram_rows_selected)) {
       return(NULL)
     }
-    connection <- poolCheckout(pool)
-    meta <- dbGetQuery(
-      connection,
-      sprintf(
-        "SELECT
-          s.fingerprint, s.window_ms, s.overlap,
-          r.duration, r.filename, d.te_factor,
-          CASE WHEN d.left_channel = 1 THEN 'left' ELSE 'right' END AS channel
-        FROM spectrogram AS s
-        INNER JOIN recording AS r ON s.recording = r.id
-        INNER JOIN device AS d ON r.device = d.id
-        WHERE s.id = %s",
-        dbQuoteLiteral(
-          connection,
-          data$spectrograms$spectrogram[input$dt_spectrogram_rows_selected]
-        )
-      )
-    )
-    data$pulse <- dbGetQuery(
-      connection,
-      sprintf(
-        "SELECT
-          pulse.id, start_time, end_time, start_frequency, end_frequency,
-          peak_time, peak_frequency,
-          CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
-          CASE WHEN colour IS NULL THEN 'black' ELSE colour END AS colour,
-          CASE
-            WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
-          CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
-        FROM pulse
-        LEFT JOIN class ON pulse.class = class.id
-        WHERE spectrogram = %s
-        ORDER BY start_time",
-        dbQuoteLiteral(
-          connection,
-          data$spectrograms$spectrogram[input$dt_spectrogram_rows_selected]
-        )
-      )
-    )
-    poolReturn(connection)
-
-    max_freq <- ceiling(max(c(data$pulse$end_frequency, 150)))
-    updateSliderInput(
-      session, "frequency", value = c(0, max_freq), max = max_freq
-    )
-    updateSliderInput(
-      session, "timeinterval",
-      value = max_freq * as.numeric(input$aspect) * 1.35
-    )
-    data$title <- meta$filename
-    data$current_pulse <- 1
-
-    wav <- sound_wav(
-      filename = meta$filename, channel = meta$channel,
-      te_factor = meta$te_factor, max_length = meta$duration
-    )
-    sonogram <- sound_spectrogram(
-      wav = wav, window_ms = meta$window_ms, overlap = meta$overlap
-    )
-    sonogram@SpecGram$f <- sonogram@SpecGram$f / 1000
-    sonogram@SpecGram$t <- sonogram@SpecGram$t * 1000
-    data$sonogram <- raster(
-      sonogram@SpecGram$S[rev(seq_along(sonogram@SpecGram$f)), ],
-      xmn = min(sonogram@SpecGram$t),
-      xmx = max(sonogram@SpecGram$t),
-      ymn = min(sonogram@SpecGram$f),
-      ymx = max(sonogram@SpecGram$f)
-    )
-    data$maximum <- floor(tail(sonogram@SpecGram$t, 1))
-
-    updateSliderInput(
-      session,
-      "starttime",
-      value = find_start(data, input),
-      min = floor(min(sonogram@SpecGram$t)),
-      max = data$maximum - input$timeinterval
+    data <- set_pulses(
+      session = session, pool = pool, data = data, input = input,
+      spectrogram = input$dt_spectrogram_rows_selected
     )
   })
 
