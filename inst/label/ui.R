@@ -25,6 +25,8 @@ shinyUI(
           actionButton("step_backward", label = "<<<"),
           actionButton("step_forward", label = ">>>"),
           checkboxInput("skip_labeled", label = "skip labeled", value = TRUE),
+          textOutput("prediction"),
+          actionButton("use_dominant", label = "use dominant class"),
           selectizeInput(
             "class_id", label = "class",
             choices = c("[no class]" = "0", "[new class]" = "-1"),

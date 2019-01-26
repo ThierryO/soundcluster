@@ -70,6 +70,7 @@ set_dropdown <- function(session, pool) {
 
 set_pulses <- function(session, pool, data, input) {
   connection <- poolCheckout(pool)
+  on.exit(poolReturn(connection))
   meta <- dbGetQuery(
     connection,
     sprintf(
@@ -84,26 +85,7 @@ set_pulses <- function(session, pool, data, input) {
       dbQuoteLiteral(connection, data$current_spectrogram)
     )
   )
-  data$pulse <- dbGetQuery(
-    connection,
-    sprintf(
-      "SELECT
-        pulse.id, start_time, end_time, start_frequency, end_frequency,
-        peak_time, peak_frequency,
-        CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
-        CASE WHEN colour IS NULL THEN 'black' ELSE colour END AS colour,
-        CASE
-          WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
-        CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
-      FROM pulse
-      LEFT JOIN class ON pulse.class = class.id
-      WHERE spectrogram = %s
-      ORDER BY start_time",
-      dbQuoteLiteral(connection, data$current_spectrogram)
-    )
-  )
-  poolReturn(connection)
-
+  data$pulse <- read_pulse(input = input, data = data, connection = connection)
   max_freq <- ceiling(max(c(data$pulse$end_frequency, 150)))
   updateSliderInput(
     session, "frequency", value = c(0, max_freq), max = max_freq
@@ -142,4 +124,48 @@ set_pulses <- function(session, pool, data, input) {
     max = data$maximum - input$timeinterval
   )
   return(data)
+}
+
+read_pulse <- function(input, data, connection) {
+  if (input$node_model == "") {
+    sql <- sprintf(
+      "SELECT
+        pulse.id, start_time, end_time, start_frequency, end_frequency,
+        peak_time, peak_frequency,
+        CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
+        CASE WHEN colour IS NULL THEN 'black' ELSE colour END AS colour,
+        CASE
+          WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
+        CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
+      FROM pulse
+      LEFT JOIN class ON pulse.class = class.id
+      WHERE spectrogram = %s
+      ORDER BY start_time",
+      dbQuoteLiteral(connection, data$current_spectrogram)
+    )
+    return(dbGetQuery(connection, sql))
+  }
+  sql <- sprintf(
+    "SELECT
+      p.id, start_time, end_time, start_frequency, end_frequency,
+      peak_time, peak_frequency, pr.node,
+      CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
+      CASE WHEN colour IS NULL THEN 'black' ELSE colour END AS colour,
+      CASE
+        WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
+      CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
+    FROM pulse AS p
+    LEFT JOIN class ON p.class = class.id
+    LEFT JOIN prediction AS pr ON pr.pulse = p.id
+    INNER JOIN node AS n ON pr.node = n.id
+    WHERE spectrogram = %s AND n.model = %s
+    ORDER BY start_time",
+    dbQuoteLiteral(connection, data$current_spectrogram),
+    dbQuoteLiteral(connection, as.integer(input$node_model))
+  )
+  pulse <- dbGetQuery(connection, sql)
+  nc <- get_node_classification(connection, as.integer(input$node_model))
+  colnames(nc) <- c("node", "dominant", "classification")
+  pulse <- merge(pulse, nc, by = "node")
+  pulse[order(pulse$start_time), ]
 }

@@ -342,6 +342,13 @@ shinyServer(function(input, output, session) {
     }
   )
 
+  output$prediction <- renderText({
+    if (input$node_model == "") {
+      return(NULL)
+    }
+    data$pulse$classification[data$current_pulse]
+  })
+
   observeEvent(
     input$timeinterval,
     {
@@ -532,6 +539,44 @@ shinyServer(function(input, output, session) {
   )
 
   observeEvent(
+    input$use_dominant,
+    {
+      if (!"dominant" %in% colnames(data$pulse)) {
+        return(NULL)
+      }
+      if (is.na(data$pulse$dominant[data$current_pulse])) {
+        return(NULL)
+      }
+      connection <- poolCheckout(pool)
+      res <- dbSendQuery(
+        connection,
+        sprintf(
+          "UPDATE pulse SET class = %s WHERE id = %s",
+          dbQuoteLiteral(connection, data$pulse$dominant[data$current_pulse]),
+          dbQuoteLiteral(connection, data$pulse$id[data$current_pulse])
+        )
+      )
+      dbClearResult(res)
+      data$pulse <- read_pulse(
+        input = input, data = data, connection = connection
+      )
+      poolReturn(connection)
+      if (data$current_pulse == nrow(data$pulse)) {
+        return(NULL)
+      }
+      data$current_pulse  <- data$current_pulse + 1
+      if (input$skip_labeled) {
+        while (
+          data$current_pulse < nrow(data$pulse) &&
+          data$pulse$class[data$current_pulse] > 0
+        ) {
+          data$current_pulse  <- data$current_pulse + 1
+        }
+      }
+    }
+  )
+
+  observeEvent(
     input$update_class,
     {
       if (as.integer(input$class_id) < 1) {
@@ -547,23 +592,8 @@ shinyServer(function(input, output, session) {
         )
       )
       dbClearResult(res)
-      data$pulse <- dbGetQuery(
-        connection,
-        sprintf(
-          "SELECT
-            pulse.id, start_time, end_time, start_frequency, end_frequency,
-            peak_time, peak_frequency,
-            CASE WHEN class IS NULL THEN 0 ELSE class END AS class,
-            CASE WHEN colour IS NULL THEN 'black' ELSE colour END AS colour,
-            CASE
-              WHEN linetype IS NULL THEN 'solid' ELSE linetype END AS linetype,
-            CASE WHEN angle IS NULL THEN 45 ELSE angle END AS angle
-          FROM pulse
-          LEFT JOIN class ON pulse.class = class.id
-          WHERE spectrogram = %s
-          ORDER BY start_time",
-          dbQuoteLiteral(connection, data$current_spectrogram)
-        )
+      data$pulse <- read_pulse(
+        input = input, data = data, connection = connection
       )
       poolReturn(connection)
       if (data$current_pulse == nrow(data$pulse)) {

@@ -17,14 +17,18 @@ get_node_classification.soundDatabase <- function(x, model) {
   }
 }
 
-#' @importFrom assertthat assert_that is.number
-#' @importFrom RSQLite dbGetQuery dbQuoteLiteral
 #' @importFrom pool poolCheckout poolReturn
-#' @importFrom stats aggregate
 #' @export
 get_node_classification.Pool <- function(x, model) {
   conn <- poolCheckout(x)
   on.exit(poolReturn(conn))
+}
+
+#' @importFrom assertthat assert_that is.number
+#' @importFrom RSQLite dbGetQuery dbQuoteLiteral
+#' @importFrom stats aggregate
+#' @export
+get_node_classification.SQLiteConnection <- function(x, model) {
   if (missing(model)) {
     sql <-
       "WITH cte_weight AS (
@@ -71,12 +75,12 @@ get_node_classification.Pool <- function(x, model) {
       INNER JOIN cte_total AS ct ON cw.node = ct.node
       INNER JOIN class AS c ON cw.class = c.id
       ORDER BY probability DESC",
-      dbQuoteLiteral(conn, model)
+      dbQuoteLiteral(x, model)
     )
   }
-  class <- dbGetQuery(conn, sql)
+  class <- dbGetQuery(x, sql)
   dominant <- class[!duplicated(class$node), c("node", "class")]
   class$text <- sprintf("%s (%.0f%%)", class$abbreviation, class$probability)
-  text <- aggregate(text ~ node, class, paste)
+  text <- aggregate(text ~ node, class, paste, collapse = ", ")
   merge(dominant, text, by = "node")
 }
