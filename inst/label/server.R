@@ -8,6 +8,7 @@ shinyServer(function(input, output, session) {
   data <- reactiveValues(
     clamped = NULL,
     current_pulse = NULL,
+    current_spectrogram = NULL,
     maximum = NULL,
     nodes = NULL,
     pulse = NULL,
@@ -78,6 +79,7 @@ shinyServer(function(input, output, session) {
       "SELECT
         n.id AS node, n.x, n.y,
         COUNT(pr.pulse) AS pulses,
+        SUM(p.class IS NOT NULL) AS labeled,
         SUM(p.class IS NULL) AS unlabeled,
         ROUND(MIN(distance), 2) AS min_dist,
         ROUND(MAX(distance), 2) AS max_dist
@@ -86,7 +88,7 @@ shinyServer(function(input, output, session) {
       INNER JOIN pulse AS p on pr.pulse = p.id
       WHERE n.model = %s
       GROUP BY n.id, n.x, n.y
-      ORDER BY max_dist DESC",
+      ORDER BY labeled, unlabeled DESC",
       dbQuoteLiteral(
         connection,
         input$node_model
@@ -130,6 +132,7 @@ shinyServer(function(input, output, session) {
         SELECT
           p.spectrogram,
           COUNT(pr.pulse) AS predictions,
+          SUM(p.class IS NULL) AS unlabeled,
           MIN(pr.distance) AS min_dist,
           MAX(pr.distance) AS max_dist
         FROM prediction AS pr
@@ -139,16 +142,18 @@ shinyServer(function(input, output, session) {
       )
 
       SELECT
-        s.id AS spectrogram, s.fingerprint, cs.predictions, cs.min_dist, cs.max_dist,
+        s.id AS spectrogram, s.fingerprint, cs.predictions, cs.unlabeled,
+        ROUND(cs.min_dist, 1) AS 'min. distance',
+        ROUND(cs.max_dist, 1) AS 'max. distance',
         ROUND(r.duration, 2) AS duration,
-        ROUND(r.duration / r.total_duration, 2) AS fraction,
+        ROUND(r.duration / r.total_duration, 2) AS 'fraction used',
         d.make || ' ' || d.model || COALESCE(' ' || d.serial, '') AS device,
         r.filename
       FROM cte_spectrogram AS cs
       INNER JOIN spectrogram AS s ON cs.spectrogram = s.id
       INNER JOIN recording AS r ON s.recording = r.id
       INNER JOIN device AS d ON r.device = d.id
-      ORDER BY max_dist DESC
+      ORDER BY unlabeled DESC, max_dist DESC
       ",
       dbQuoteLiteral(
         connection,
@@ -172,9 +177,11 @@ shinyServer(function(input, output, session) {
     if (is.null(input$dt_node_quality_spectrogram_rows_selected)) {
       return(NULL)
     }
+    data$current_spectrogram <- data$spectrograms$spectrogram[
+      input$dt_node_quality_spectrogram_rows_selected
+    ]
     data <- set_pulses(
-      session = session, pool = pool, data = data, input = input,
-      spectrogram = input$dt_node_quality_spectrogram_rows_selected
+      session = session, pool = pool, data = data, input = input
     )
   })
 
@@ -182,9 +189,11 @@ shinyServer(function(input, output, session) {
     if (is.null(input$dt_spectrogram_rows_selected)) {
       return(NULL)
     }
+    data$current_spectrogram <- data$spectrograms$spectrogram[
+      input$dt_spectrogram_rows_selected
+    ]
     data <- set_pulses(
-      session = session, pool = pool, data = data, input = input,
-      spectrogram = input$dt_spectrogram_rows_selected
+      session = session, pool = pool, data = data, input = input
     )
   })
 
@@ -281,6 +290,14 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       data$current_pulse  <- data$current_pulse - 1
+      if (input$skip_labeled) {
+        while (
+          data$current_pulse > 1 &&
+          data$pulse$class[data$current_pulse] > 0
+        ) {
+          data$current_pulse  <- data$current_pulse - 1
+        }
+      }
     }
   )
 
@@ -294,6 +311,15 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       data$current_pulse  <- data$current_pulse + 1
+
+      if (input$skip_labeled) {
+        while (
+          data$current_pulse < nrow(data$pulse) &&
+          data$pulse$class[data$current_pulse] > 0
+        ) {
+          data$current_pulse  <- data$current_pulse + 1
+        }
+      }
     }
   )
 
@@ -536,10 +562,7 @@ shinyServer(function(input, output, session) {
           LEFT JOIN class ON pulse.class = class.id
           WHERE spectrogram = %s
           ORDER BY start_time",
-          dbQuoteLiteral(
-            connection,
-            data$spectrograms$spectrogram[input$dt_spectrogram_rows_selected]
-          )
+          dbQuoteLiteral(connection, data$current_spectrogram)
         )
       )
       poolReturn(connection)
@@ -547,6 +570,14 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       data$current_pulse  <- data$current_pulse + 1
+      if (input$skip_labeled) {
+        while (
+          data$current_pulse < nrow(data$pulse) &&
+          data$pulse$class[data$current_pulse] > 0
+        ) {
+          data$current_pulse  <- data$current_pulse + 1
+        }
+      }
     }
   )
 })

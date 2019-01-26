@@ -1,3 +1,4 @@
+library(soundcluster)
 pool <- connect_db(path = Sys.getenv("LABEL_PATH"))@Connection
 onStop(function() {
   poolClose(pool)
@@ -67,7 +68,7 @@ set_dropdown <- function(session, pool) {
     )
 }
 
-set_pulses <- function(session, pool, data, input, spectrogram) {
+set_pulses <- function(session, pool, data, input) {
   connection <- poolCheckout(pool)
   meta <- dbGetQuery(
     connection,
@@ -80,7 +81,7 @@ set_pulses <- function(session, pool, data, input, spectrogram) {
       INNER JOIN recording AS r ON s.recording = r.id
       INNER JOIN device AS d ON r.device = d.id
       WHERE s.id = %s",
-      dbQuoteLiteral(connection, data$spectrograms$spectrogram[spectrogram])
+      dbQuoteLiteral(connection, data$current_spectrogram)
     )
   )
   data$pulse <- dbGetQuery(
@@ -98,7 +99,7 @@ set_pulses <- function(session, pool, data, input, spectrogram) {
       LEFT JOIN class ON pulse.class = class.id
       WHERE spectrogram = %s
       ORDER BY start_time",
-      dbQuoteLiteral(connection, data$spectrograms$spectrogram[spectrogram])
+      dbQuoteLiteral(connection, data$current_spectrogram)
     )
   )
   poolReturn(connection)
@@ -112,7 +113,8 @@ set_pulses <- function(session, pool, data, input, spectrogram) {
     value = max_freq * as.numeric(input$aspect) * 1.35
   )
   data$title <- meta$filename
-  data$current_pulse <- 1
+  to_do <- which(data$pulse$class == 0)
+  data$current_pulse <- ifelse(length(to_do) == 0, 1, min(to_do))
 
   wav <- sound_wav(
     filename = meta$filename, channel = meta$channel,
