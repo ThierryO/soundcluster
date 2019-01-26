@@ -32,6 +32,7 @@ Suggests:
 Collate: 
     'connect_db.R'
     'extract_full_pulse.R'
+    'get_node_classification.R'
     'import_S3_classes.R'
     'next_power_2.R'
     'plot_soundCluster.R'
