@@ -278,6 +278,13 @@ shinyServer(function(input, output, session) {
       lwd = 2
     )
     abline(h = c(18, 21, 27, 35), lty = 3, col = "white", lwd = 2)
+    points(
+      data$pulse$peak_time,
+      data$pulse$peak_frequency,
+      col = data$pulse$colour,
+      pch = 13,
+      cex = 2
+    )
   })
 
   observeEvent(
