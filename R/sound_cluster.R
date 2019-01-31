@@ -2,17 +2,22 @@
 #'
 #' @param x a soundPyramide object
 #' @param grid_dim the dimensions of the clustering grid
+#' @param meta_weight relative weight of the pulse meta layer versus the pulse shape layer. Defaults to 10
 #' @param ... extra arugments
 #' @export
-sound_cluster <- function(x, grid_dim = c(8, 10), ...) {
+sound_cluster <- function(x, grid_dim = c(8, 10), meta_weight = 10, ...) {
   UseMethod("sound_cluster", x)
 }
 
 #' @export
-#' @importFrom assertthat assert_that is.count
+#' @importFrom assertthat assert_that is.count is.number
 #' @importFrom kohonen somgrid supersom
-sound_cluster.soundPyramid <- function(x, grid_dim = c(8, 10), ...) {
+sound_cluster.soundPyramid <- function(
+  x, grid_dim = c(8, 10), meta_weight = 10, ...
+) {
   assert_that(
+    is.number(meta_weight),
+    meta_weight > 0,
     length(grid_dim) == 2,
     is.count(grid_dim[1]),
     is.count(grid_dim[2])
@@ -25,13 +30,14 @@ sound_cluster.soundPyramid <- function(x, grid_dim = c(8, 10), ...) {
     topo = "rectangular", neighbourhood.fct = "bubble",
     toroidal = FALSE
   )
+
   new(
     "soundCluster",
     Network = supersom(
       data = list(x@PulseMeta, x@Pyramid),
       grid = sg,
       rlen = 100,
-      user.weights = c(10, 1),
+      user.weights = c(meta_weight / ncol(x@PulseMeta), 1 / ncol(x@Pyramid)),
       normalizeDataLayers = FALSE,
       mode = "pbatch"
     ),
@@ -43,7 +49,9 @@ sound_cluster.soundPyramid <- function(x, grid_dim = c(8, 10), ...) {
 #' @importFrom methods validObject
 #' @importFrom pool poolCheckout poolReturn
 #' @importFrom RSQLite dbWriteTable dbGetQuery dbSendQuery dbClearResult dbRemoveTable
-sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
+sound_cluster.soundDatabase <- function(
+  x, grid_dim = c(8, 10), meta_weight = 10, ...
+) {
   validObject(x)
   connection <- poolCheckout(x@Connection)
 
@@ -51,7 +59,9 @@ sound_cluster.soundDatabase <- function(x, grid_dim = c(8, 10), ...) {
   pyramids <- sound_pyramid(x, ...)
 
   message("Clustering")
-  cluster <- sound_cluster(pyramids, grid_dim = grid_dim)
+  cluster <- sound_cluster(
+    pyramids, grid_dim = grid_dim, meta_weight = meta_weight, ...
+  )
 
   message("Storing cluster")
 

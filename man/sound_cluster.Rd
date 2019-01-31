@@ -4,12 +4,14 @@
 \alias{sound_cluster}
 \title{Cluster sounds}
 \usage{
-sound_cluster(x, grid_dim = c(8, 10), ...)
+sound_cluster(x, grid_dim = c(8, 10), meta_weight = 10, ...)
 }
 \arguments{
 \item{x}{a soundPyramide object}
 
 \item{grid_dim}{the dimensions of the clustering grid}
+
+\item{meta_weight}{relative weight of the pulse meta layer versus the pulse shape layer. Defaults to 10}
 
 \item{...}{extra arugments}
 }
