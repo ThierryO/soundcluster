@@ -148,7 +148,7 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
   fingerprint <- pulses$fingerprint
   pulses$fingerprint <- NULL
 
-  max_var <- pmax(1, 4 ^ floor(log(nrow(pulses), base = 4)))
+  max_var <- pmax(1, 4 ^ floor(log(nrow(pulses) / 10, base = 4)))
   pyramid <- matrix(
     NA_real_,
     ncol = max_var, nrow = nrow(pulses),
@@ -166,7 +166,8 @@ sound_pyramid.soundDatabase <- function(x, spectrogram, n, ...) {
     )
     extra <- dbGetQuery(connection, sql)
     if (nrow(extra) < nrow(pulses)) {
-      pyramid <- pyramid[, seq_len(i - 1), drop = FALSE]
+      max_var <- 4 ^ floor(log(i - 1, base = 4))
+      pyramid <- pyramid[, seq_len(max_var), drop = FALSE]
       break
     }
     pyramid[, i] <- extra$value
