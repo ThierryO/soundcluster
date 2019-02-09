@@ -292,6 +292,7 @@ wav2db.soundDatabase <- function(
 #' @export
 #' @importFrom assertthat assert_that is.string is.flag
 #' @importFrom utils file_test
+#' @importFrom pool poolClose
 wav2db.character <- function(
   db, path, recursive = TRUE, make, model, serial = NA_character_,
   te_factor = 1, channel = c("left", "right"), max_length = 30, window_ms = 1,
@@ -305,8 +306,9 @@ wav2db.character <- function(
   channel <- match.arg(channel)
   existing <- match.arg(existing)
   if (file_test("-f", path)) {
+    x <- connect_db(path = db)
     wav2db(
-      db = connect_db(path = db),
+      db = x,
       path = path,
       make = make,
       model = model,
@@ -321,6 +323,7 @@ wav2db.character <- function(
       overlap = overlap,
       frequency_range = frequency_range
     )
+    poolClose(x)
     return(invisible(path))
   } else if (!file_test("-d", path)) {
     stop("path must be an existing file or directory")
@@ -347,10 +350,11 @@ wav2db.character <- function(
     )
     lapply(cmds, system)
   } else {
+    x <- connect_db(path = db)
     lapply(
       sample(wavs),
       wav2db,
-      db = db,
+      db = x,
       make = make,
       model = model,
       serial = serial,
@@ -365,6 +369,7 @@ wav2db.character <- function(
       existing = existing,
       frequency_range = frequency_range
     )
+    poolClose(x)
   }
   return(invisible(wavs))
 }
