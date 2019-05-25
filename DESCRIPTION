@@ -31,6 +31,7 @@ Suggests:
   littler
 Collate: 
     'connect_db.R'
+    'extract_boundary.R'
     'extract_full_pulse.R'
     'get_node_classification.R'
     'import_S3_classes.R'

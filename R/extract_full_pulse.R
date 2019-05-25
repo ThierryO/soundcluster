@@ -79,8 +79,9 @@ extract_full_pulse <- function(
       rows <- range(which(rowSums(local, na.rm = TRUE) > 0))
       local_ext <- extent(local, rows[1], rows[2], cols[1], cols[2])
       clump <- crop(local, local_ext)
+      detail <- crop(spectrogram_raster, local_ext)
       unscaled <- overlay(
-        crop(spectrogram_raster, local_ext),
+        detail,
         clump,
         fun = function(x, y) {
           ifelse(

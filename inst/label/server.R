@@ -204,6 +204,7 @@ shinyServer(function(input, output, session) {
         return(NULL)
       }
       amplitude_range <- pretty(cellStats(data$sonogram, "range"), 10)
+      data$clamped <- NULL
       updateSliderInput(
         session,
         "amplitude",
