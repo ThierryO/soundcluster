@@ -1,6 +1,10 @@
 library(RSQLite)
 library(pool)
 library(raster)
+library(purrr)
+library(tidyr)
+library(dplyr)
+library(mgcv)
 
 connect_pulse_db <- function(path) {
   db <- file.path(path, "soundcluster.sqlite")
@@ -224,6 +228,29 @@ read_spectrogram <- function(pool, spectrogram) {
       dbGetQuery(conn = conn),
       by = "fingerprint"
   ) %>%
+    inner_join(
+      sprintf("
+        SELECT
+          p.id, pr.class, c.abbreviation, pr.prediction * 100 AS prediction
+        FROM pulse AS p
+        INNER JOIN spectrogram AS s ON s.id = p.spectrogram
+        INNER JOIN prediction AS pr ON p.id = pr.pulse
+        INNER JOIN class AS c ON pr.class = c.id
+        WHERE s.id = %i AND pr.prediction > 0.05
+        ORDER BY p.id, pr.prediction DESC", spectrogram
+      ) %>%
+        dbGetQuery(conn = conn) %>%
+        group_by(id) %>%
+        slice(1:3) %>%
+        ungroup() %>%
+        mutate(prediction = sprintf("%s (%.0f%%)", abbreviation, prediction)) %>%
+        group_by(id) %>%
+        summarise(
+          dominant = class[1],
+          prediction = paste(prediction, collapse = ", ")
+        ),
+      by = "id"
+    ) %>%
     arrange(start_time + end_time, peak_frequency, select_amplitude) ->
     sound_pulse
   poolReturn(conn)
@@ -246,13 +273,6 @@ shape2raster <- function(x) {
     list(NA)
   )
 }
-
-pool <- connect_pulse_db(
-  path = file.path("~", "github", "thierryo", "vleermuizen", "soundpulse")
-)
-onStop(function() {
-  poolClose(pool)
-})
 
 set_dropdown <- function(session, pool) {
     behaviour <- dbGetQuery(
@@ -359,14 +379,19 @@ get_pca <- function(pool) {
 fit_model <- function(this_class, this_df, dataset) {
   dataset %>%
     mutate(output = class == this_class) -> this_dataset
-  formula <- "output ~ PC1 + I(PC1 ^ 2)"
-  if (this_df >= 5) {
-    formula <- paste(formula, "+ PC2 + I(PC2 ^ 2) + PC1:PC2")
+  if (this_df <= 5) {
+    formula <- output ~ s(PC1)
+  } else if (this_df <= 9) {
+    formula <- output ~ s(PC1, PC2)
+  } else if (this_df <= 14) {
+    formula <- output ~ s(PC1, PC2, PC3)
+  } else if (this_df <= 20) {
+    formula <- output ~ s(PC1, PC2, PC3, PC4)
   }
-  glm(as.formula(formula), data = this_dataset, family = binomial)
+  gam(formula, data = this_dataset, family = binomial)
 }
 
-get_models <- function(pool) {
+get_models <- function(pool, pca) {
   conn <- poolCheckout(pool)
   dbGetQuery(conn, "
     SELECT CAST(id AS CHARACTER) AS id, class
@@ -386,3 +411,34 @@ get_models <- function(pool) {
       model = map2(class, df, ~fit_model(.x, .y, data = dataset))
     )
 }
+
+add_prediction <- function(pool) {
+  conn <- poolCheckout(pool)
+  pca <- get_pca(pool)
+  get_models(pool, pca) %>%
+    mutate(
+      prediction = map(
+        model,
+        ~tibble(
+          pulse = rownames(pca$x) %>%
+            as.integer(),
+          prediction = predict(.x, newdata = as.data.frame(pca$x)) %>%
+            plogis()
+        )
+      ),
+    ) %>%
+    select(class, prediction) %>%
+    unnest() %>%
+    dbWriteTable(conn = conn, name = "prediction", overwrite = TRUE)
+  dbSendQuery(conn = conn, "VACUUM") %>%
+    dbClearResult()
+  poolReturn(conn)
+  return(NULL)
+}
+
+pool <- connect_pulse_db(
+  path = file.path("~", "github", "thierryo", "vleermuizen", "soundpulse")
+)
+onStop(function() {
+  poolClose(pool)
+})

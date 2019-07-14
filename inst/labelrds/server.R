@@ -16,6 +16,10 @@ shinyServer(function(input, output, session) {
     data$spectrogram <- sample_spectrogram(pool)
   })
 
+  observeEvent(input$remodel, {
+    add_prediction(pool)
+  })
+
   observeEvent(data$spectrogram, {
     read_spectrogram(pool, data$spectrogram) %>%
       mutate(
@@ -340,6 +344,50 @@ shinyServer(function(input, output, session) {
     }
   )
 
+  observeEvent(
+    input$use_dominant,
+    {
+      if (!"dominant" %in% colnames(data$raster)) {
+        return(NULL)
+      }
+      if (is.na(data$raster$dominant[data$current_pulse])) {
+        return(NULL)
+      }
+      connection <- poolCheckout(pool)
+      res <- dbSendQuery(
+        connection,
+        sprintf(
+          "UPDATE pulse SET class = %s WHERE id = %s",
+          dbQuoteLiteral(connection, data$raster$dominant[data$current_pulse]),
+          dbQuoteLiteral(connection, data$raster$id[data$current_pulse])
+        )
+      )
+      dbClearResult(res)
+      data$raster$class[data$current_pulse] <-
+        data$raster$dominant[data$current_pulse]
+      dbGetQuery(
+        connection,
+        sprintf(
+          "SELECT colour, linetype, angle FROM class WHERE id = %s",
+          dbQuoteLiteral(connection, data$raster$dominant[data$current_pulse])
+        )
+      ) -> data$raster[data$current_pulse, c("colour", "linetype", "angle")]
+      poolReturn(connection)
+      if (data$current_pulse == nrow(data$raster)) {
+        return(NULL)
+      }
+      data$current_pulse  <- data$current_pulse + 1
+      if (input$skip_labeled) {
+        while (
+          data$current_pulse < nrow(data$raster) &&
+          data$raster$class[data$current_pulse] > 0
+        ) {
+          data$current_pulse  <- data$current_pulse + 1
+        }
+      }
+    }
+  )
+
   output$sonogram <- renderPlot({
     if (is.null(data$raster)) {
       return(NULL)
@@ -412,6 +460,6 @@ shinyServer(function(input, output, session) {
     if (is.null(data$raster)) {
       return(NULL)
     }
-    data$raster$classification[data$current_pulse]
+    data$raster$prediction[data$current_pulse]
   })
 })
