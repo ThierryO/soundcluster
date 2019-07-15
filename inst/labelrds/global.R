@@ -6,7 +6,7 @@ library(tidyr)
 library(dplyr)
 library(mgcv)
 
-connect_pulse_db <- function(path) {
+connect_pulse_db <- function(path, size = 2 ^ 5) {
   db <- file.path(path, "soundcluster.sqlite")
   pool <- dbPool(drv = SQLite(), dbname = db)
   connection <- poolCheckout(pool)
@@ -100,6 +100,18 @@ connect_pulse_db <- function(path) {
   )
   dbClearResult(res)
 
+  sprintf("col_%02i INTEGER", seq_len(size)) %>%
+    paste(collapse = ",\n        ") %>%
+    sprintf(fmt = "
+      CREATE TABLE IF NOT EXISTS shape (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pulse INTEGER NOT NULL REFERENCES pulse (id),
+        row INTEGER NOT NULL,
+        %s
+      )") %>%
+    dbSendQuery(conn = connection) %>%
+    dbClearResult()
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS prediction (
@@ -114,7 +126,7 @@ connect_pulse_db <- function(path) {
   return(pool)
 }
 
-import_rds <- function(path, pool) {
+import_rds <- function(path, pool, size = 2 ^ 5) {
   if (file_test("-d", path)) {
     list.files(
       path, pattern = "\\.rds$", full.names = TRUE, recursive = TRUE
@@ -122,6 +134,7 @@ import_rds <- function(path, pool) {
       sapply(import_rds,pool = pool)
     return(NULL)
   }
+  message(path)
   connection <- poolCheckout(pool)
   dbBegin(connection)
   on.exit(dbRollback(connection))
@@ -132,9 +145,31 @@ import_rds <- function(path, pool) {
     dbWriteTable(conn = connection, name = "staging_recording", overwrite = TRUE)
   sound_pulse@Spectrogram %>%
     dbWriteTable(conn = connection, name = "staging_spectrogram")
-  sound_pulse@Pulse %>%
-    select(-shape) %>%
-    dbWriteTable(conn = connection, name = "staging_pulse")
+  if (nrow(sound_pulse@Pulse)) {
+    sound_pulse@Pulse %>%
+      select(-shape) %>%
+      dbWriteTable(conn = connection, name = "staging_pulse")
+    sound_pulse@Pulse %>%
+      transmute(
+        fingerprint,
+        shape = map(
+          shape,
+          ~floor(.x * 256) %>%
+            pmax(-255) %>%
+            as.data.frame() %>%
+            mutate(row = row_number())
+        )
+      ) %>%
+      unnest() %>%
+      rename_at(
+        vars(starts_with("V")),
+        ~gsub("V([0-9])", "\\1", .x) %>%
+         as.integer() %>%
+         sprintf(fmt = "col_%02i")
+      ) %>%
+      mutate_at(vars(starts_with("col_")), as.integer) %>%
+      dbWriteTable(conn = connection, name = "staging_shape")
+  }
 
   dbSendQuery(conn = connection, "
     INSERT INTO recording
@@ -155,21 +190,38 @@ import_rds <- function(path, pool) {
     WHERE ps.id IS NULL") %>%
     dbClearResult()
 
-  dbSendQuery(conn = connection, "
-    INSERT INTO pulse
-    SELECT NULL AS id, sp.fingerprint, ps.id AS spectrogram, NULL AS class,
-           sp.peak_time, sp.peak_frequency, sp.peak_amplitude, sp.start_time,
-           sp.start_frequency, sp.start_amplitude, sp.end_time, sp.end_frequency,
-           sp.select_amplitude
-    FROM staging_pulse AS sp
-    INNER JOIN spectrogram AS ps ON ps.fingerprint = sp.spectrogram
-    LEFT JOIN pulse AS pp ON sp.fingerprint = pp.fingerprint
-    WHERE pp.id IS NULL") %>%
-    dbClearResult()
+  if (nrow(sound_pulse@Pulse)) {
+    dbSendQuery(conn = connection, "
+      INSERT INTO pulse
+      SELECT NULL AS id, sp.fingerprint, ps.id AS spectrogram, NULL AS class,
+             sp.peak_time, sp.peak_frequency, sp.peak_amplitude, sp.start_time,
+             sp.start_frequency, sp.start_amplitude, sp.end_time, sp.end_frequency,
+             sp.select_amplitude
+      FROM staging_pulse AS sp
+      INNER JOIN spectrogram AS ps ON ps.fingerprint = sp.spectrogram
+      LEFT JOIN pulse AS pp ON sp.fingerprint = pp.fingerprint
+      WHERE pp.id IS NULL") %>%
+      dbClearResult()
+
+    sprintf("ss.col_%02i", seq_len(size)) %>%
+      paste(collapse = ",  ") %>%
+      sprintf(fmt = "
+        INSERT INTO shape
+        SELECT NULL AS id, pp.id AS pulse, ss.row, %s
+        FROM pulse AS pp
+        INNER JOIN staging_shape AS ss ON pp.fingerprint = ss.fingerprint
+        LEFT JOIN shape AS ps ON ps.pulse = pp.id AND ps.row = ss.row
+        WHERE ps.id IS NULL") %>%
+      dbSendQuery(conn = connection) %>%
+      dbClearResult()
+  }
 
   dbRemoveTable(connection, "staging_recording")
   dbRemoveTable(connection, "staging_spectrogram")
-  dbRemoveTable(connection, "staging_pulse")
+  if (nrow(sound_pulse@Pulse)) {
+    dbRemoveTable(connection, "staging_pulse")
+    dbRemoveTable(connection, "staging_shape")
+  }
 
   dbCommit(connection)
   dbSendQuery(connection, "VACUUM") %>%
@@ -198,22 +250,36 @@ sample_spectrogram <- function(pool) {
   return(spectrogram)
 }
 
-read_spectrogram <- function(pool, spectrogram) {
+read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5) {
   conn <- poolCheckout(pool)
-  sprintf("
-    SELECT rds
-    FROM recording AS r
-    INNER JOIN spectrogram AS s ON r.id = s.recording
-    WHERE s.id = %i", spectrogram) %>%
+  sprintf("col_%02i", seq_len(size)) %>%
+    paste(collapse = ", ") %>%
+    sprintf(fmt = "
+      SELECT pulse AS id, %s
+      FROM pulse
+      INNER JOIN shape ON pulse.id = shape.pulse
+      WHERE spectrogram = %i
+      ORDER BY pulse, row",
+      spectrogram
+    ) %>%
     dbGetQuery(conn = conn) %>%
-    pull("rds") %>%
-    readRDS() %>%
-    slot("Pulse") %>%
+    group_by(id) %>%
+    nest(.key = "shape") %>%
+    mutate(shape = map(shape, as.matrix) %>%
+             map(`/`, 256)) %>%
     inner_join(
       sprintf("
         SELECT
           p.id,
-          p.fingerprint,
+          p.start_time,
+          p.end_time,
+          p.peak_time,
+          p.start_frequency,
+          p.end_frequency,
+          p.peak_frequency,
+          p.start_amplitude,
+          p.peak_amplitude,
+          p.select_amplitude,
           r.filename,
           COALESCE(p.class, 0) AS class,
           COALESCE(c.colour, 'black') AS colour,
@@ -226,9 +292,9 @@ read_spectrogram <- function(pool, spectrogram) {
         WHERE s.id = %i", spectrogram
       ) %>%
       dbGetQuery(conn = conn),
-      by = "fingerprint"
-  ) %>%
-    inner_join(
+      by = "id"
+    ) %>%
+    left_join(
       sprintf("
         SELECT
           p.id, pr.class, c.abbreviation, pr.prediction * 100 AS prediction
@@ -243,7 +309,9 @@ read_spectrogram <- function(pool, spectrogram) {
         group_by(id) %>%
         slice(1:3) %>%
         ungroup() %>%
-        mutate(prediction = sprintf("%s (%.0f%%)", abbreviation, prediction)) %>%
+        mutate(
+          prediction = sprintf("%s (%.0f%%)", abbreviation, prediction)
+        ) %>%
         group_by(id) %>%
         summarise(
           dominant = class[1],
