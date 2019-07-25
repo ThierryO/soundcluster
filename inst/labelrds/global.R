@@ -1,17 +1,19 @@
+library(kohonen)
 library(RSQLite)
 library(pool)
 library(raster)
 library(purrr)
 library(tidyr)
+library(stringr)
 library(dplyr)
-library(mgcv)
+library(keras)
 
 connect_pulse_db <- function(path, size = 2 ^ 5) {
   db <- file.path(path, "soundcluster.sqlite")
   pool <- dbPool(drv = SQLite(), dbname = db)
   connection <- poolCheckout(pool)
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS recording (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,10 +27,10 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       rds TEXT,
       filename TEXT
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS spectrogram (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,10 +41,10 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       min_frequency REAL NOT NULL,
       max_frequency REAL NOT NULL
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS species (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,10 +52,10 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       gbif INTEGER UNIQUE,
       name TEXT NOT NULL UNIQUE
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS behaviour (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,10 +64,10 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       linetype TEXT DEFAULT 'solid',
       angle INTEGER DEFAULT 45
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS class (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,10 +79,10 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       linetype TEXT DEFAULT 'solid',
       angle INTEGER DEFAULT 45
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS pulse (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,8 +99,8 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
       end_frequency REAL NOT NULL,
       select_amplitude REAL NOT NULL
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
 
   sprintf("col_%02i INTEGER", seq_len(size)) %>%
     paste(collapse = ",\n        ") %>%
@@ -112,15 +114,26 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
     dbSendQuery(conn = connection) %>%
     dbClearResult()
 
-  res <- dbSendQuery(
+  dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS prediction (
-      pulse INTEGER NOT NULL REFERENCES pulse (id),
-      class INTEGER NOT NULL REFERENCES class (id),
-      prediction REAL NOT NULL
+    "CREATE TABLE IF NOT EXISTS model (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      x_dim INTEGER NOT NULL,
+      y_dim INTEGER NOT NULL
     )"
-  )
-  dbClearResult(res)
+  ) %>%
+    dbClearResult()
+
+  dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS node (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model INTEGER NOT NULL,
+      x_pos INTEGER NOT NULL,
+      y_pos INTEGER NOT NULL
+    )"
+  ) %>%
+    dbClearResult()
 
   poolReturn(connection)
   return(pool)
@@ -142,17 +155,19 @@ import_rds <- function(path, pool, size = 2 ^ 5) {
   sound_pulse <- readRDS(path)
   sound_pulse@Recording %>%
     mutate(rds = path, timestamp = as.integer(timestamp)) %>%
-    dbWriteTable(conn = connection, name = "staging_recording", overwrite = TRUE)
+    dbWriteTable(conn = connection, name = "staging_recording",
+                 overwrite = TRUE, temporary = TRUE)
   sound_pulse@Spectrogram %>%
-    dbWriteTable(conn = connection, name = "staging_spectrogram")
+    dbWriteTable(conn = connection, name = "staging_spectrogram",
+                 temporary = TRUE)
   if (nrow(sound_pulse@Pulse)) {
     sound_pulse@Pulse %>%
       select(-shape) %>%
-      dbWriteTable(conn = connection, name = "staging_pulse")
+      dbWriteTable(conn = connection, name = "staging_pulse", temporary = TRUE)
     sound_pulse@Pulse %>%
       transmute(
         fingerprint,
-        shape = map(
+        shape = purrr::map(
           shape,
           ~floor(.x * 256) %>%
             pmax(-255) %>%
@@ -168,7 +183,7 @@ import_rds <- function(path, pool, size = 2 ^ 5) {
          sprintf(fmt = "col_%02i")
       ) %>%
       mutate_at(vars(starts_with("col_")), as.integer) %>%
-      dbWriteTable(conn = connection, name = "staging_shape")
+      dbWriteTable(conn = connection, name = "staging_shape", temporary = TRUE)
   }
 
   dbSendQuery(conn = connection, "
@@ -234,17 +249,52 @@ import_rds <- function(path, pool, size = 2 ^ 5) {
 sample_spectrogram <- function(pool) {
   conn <- poolCheckout(pool)
   dbGetQuery(conn = conn, "
-  WITH cte AS (
-    SELECT spectrogram, CAST(COUNT(id) AS 'REAL') AS n
-    FROM pulse
-    WHERE class IS NULL
-    GROUP BY spectrogram
-  )
+    SELECT
+      node,
+      SUM(class IS NOT NULL) AS done,
+      SUM(class IS NULL) AS to_do
+    FROM prediction AS pr
+    INNER JOIN pulse AS p ON pr.pulse = p.id
+    GROUP BY node") %>%
+    mutate(
+      weight = (done + 0.1) ^ -1 * log(to_do)
+    ) %>%
+    sample_n(size = 1, weight = weight) %>%
+    pull(node) %>%
+    sprintf(fmt = "
+      WITH cte_spectrogram AS (
+        SELECT p.spectrogram
+        FROM prediction AS pr
+        INNER JOIN pulse AS p ON pr.pulse = p.id
+        WHERE node = %1$i
+        GROUP BY p.spectrogram
+      ),
+      cte_node AS (
+        SELECT
+          p.spectrogram,
+          pr.node,
+          SUM(p.class IS NOT NULL) AS done,
+          SUM(p.class IS NULL) AS to_do
+        FROM cte_spectrogram AS cs
+        INNER JOIN pulse AS p ON cs.spectrogram = p.spectrogram
+        INNER JOIN prediction AS pr ON pr.pulse = p.id
+        GROUP BY p.spectrogram, pr.node
+        HAVING SUM(p.class IS NULL) > 0
+      )
 
-  SELECT spectrogram
-  FROM cte
-  ORDER BY LOG10(n) * ABS(RANDOM()) DESC
-  LIMIT 1") %>%
+      SELECT
+        spectrogram,
+        SUM(
+          CASE
+            WHEN node = %1$i
+            THEN 10 * to_do / (done + 0.1)
+            ELSE to_do / (done + 0.1)
+            END
+        ) AS weight
+      FROM cte_node
+      GROUP BY spectrogram") %>%
+    dbGetQuery(conn = conn) %>%
+    sample_n(size = 1, prob = weight) %>%
     pull(spectrogram) -> spectrogram
   poolReturn(conn)
   return(spectrogram)
@@ -265,8 +315,8 @@ read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5) {
     dbGetQuery(conn = conn) %>%
     group_by(id) %>%
     nest(.key = "shape") %>%
-    mutate(shape = map(shape, as.matrix) %>%
-             map(`/`, 256)) %>%
+    mutate(shape = purrr::map(shape, as.matrix) %>%
+             purrr::map(`/`, 256)) %>%
     inner_join(
       sprintf("
         SELECT
@@ -296,19 +346,35 @@ read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5) {
     ) %>%
     left_join(
       sprintf("
-        SELECT
-          p.id, pr.class, c.abbreviation, pr.prediction * 100 AS prediction
-        FROM pulse AS p
-        INNER JOIN spectrogram AS s ON s.id = p.spectrogram
-        INNER JOIN prediction AS pr ON p.id = pr.pulse
-        INNER JOIN class AS c ON pr.class = c.id
-        WHERE s.id = %i AND pr.prediction > 0.05
-        ORDER BY p.id, pr.prediction DESC", spectrogram
+        WITH cte_class AS (
+          SELECT pr.node, p.class, SUM(1 / pr.distance) AS weight
+          FROM pulse AS p
+          INNER JOIN prediction AS pr ON p.id = pr.pulse
+          WHERE p.class IS NOT NULL
+          GROUP BY pr.node, p.class
+        ),
+        cte_total AS (
+          SELECT node, SUM(weight) AS tot
+          FROM cte_class
+          GROUP BY node
+        ),
+        cte_weight AS (
+          SELECT
+            c.node, c.class, cl.abbreviation,
+            100 * c.weight / t.tot AS prediction
+          FROM cte_class AS c
+          INNER JOIN class AS cl ON c.class = cl.id
+          INNER JOIN cte_total AS t ON c.node = t.node
+        )
+
+        SELECT p.id, w.class, w.abbreviation, w.prediction
+        FROM cte_weight AS w
+        INNER JOIN prediction AS pr ON pr.node = w.node
+        INNER JOIN pulse AS p ON pr.pulse = p.id
+        WHERE p.spectrogram = %i
+        ORDER BY p.id, w.prediction DESC", spectrogram
       ) %>%
         dbGetQuery(conn = conn) %>%
-        group_by(id) %>%
-        slice(1:3) %>%
-        ungroup() %>%
         mutate(
           prediction = sprintf("%s (%.0f%%)", abbreviation, prediction)
         ) %>%
@@ -406,102 +472,257 @@ find_start <- function(data, input) {
   floor(start)
 }
 
-get_class_counts <- function(pool) {
+get_shapes <- function(pool, size = 2 ^ 5, max_time_range = 100) {
   conn <- poolCheckout(pool)
-  dbGetQuery(conn, "
-    WITH cte AS (
-      SELECT class, COUNT(id) AS n
-      FROM pulse
-      GROUP BY class
-    )
-
-    SELECT abbreviation, description, n
-    FROM cte
-    INNER JOIN class ON cte.class = class.id") -> counts
-  poolReturn(conn)
-  return(counts)
-}
-
-get_pca <- function(pool) {
-  conn <- poolCheckout(pool)
-  dbGetQuery(conn, "
+  sprintf("s.col_%02i", seq_len(size)) %>%
+    paste(collapse = ", ") %>%
+    sprintf(fmt = "
+      SELECT pulse, %s
+      FROM shape AS s
+      INNER JOIN pulse AS p ON s.pulse = p.id
+      WHERE p.end_time - p.start_time < %f
+      ORDER BY s.pulse, s.row",
+      max_time_range
+    ) %>%
+    dbGetQuery(conn = conn) %>%
+    group_by(pulse) %>%
+    nest(.key = "shape") %>%
+    mutate(shape = purrr::map(shape, as.matrix)) -> shapes
+  sprintf("
     SELECT
       id,
-      peak_time - start_time AS peak_time,
-      end_time - start_time AS time_range,
       peak_frequency,
+      peak_amplitude,
+      end_time - start_time AS time_range,
       end_frequency - start_frequency AS frequency_range,
-      (peak_frequency - start_frequency) /
-        end_frequency - start_frequency AS rel_peak_frequency,
-      peak_amplitude - select_amplitude AS peak_amplitude
-    FROM pulse") -> pca
-  poolReturn(conn)
-  rn <- as.character(pca$id)
-  pca %>%
-    select(-id) %>%
-    as.matrix() -> pca
-  rownames(pca) <- rn
-  prcomp(pca, center = TRUE, scale = TRUE)
-}
-
-fit_model <- function(this_class, this_df, dataset) {
-  dataset %>%
-    mutate(output = class == this_class) -> this_dataset
-  if (this_df <= 5) {
-    formula <- output ~ s(PC1)
-  } else if (this_df <= 9) {
-    formula <- output ~ s(PC1, PC2)
-  } else if (this_df <= 14) {
-    formula <- output ~ s(PC1, PC2, PC3)
-  } else if (this_df <= 20) {
-    formula <- output ~ s(PC1, PC2, PC3, PC4)
-  }
-  gam(formula, data = this_dataset, family = binomial)
-}
-
-get_models <- function(pool, pca) {
-  conn <- poolCheckout(pool)
-  dbGetQuery(conn, "
-    SELECT CAST(id AS CHARACTER) AS id, class
+      select_amplitude,
+      (peak_time - start_time) / (end_time - start_time) AS rel_time,
+      (peak_frequency - start_frequency) / (end_frequency - start_frequency) AS
+        rel_frequency
     FROM pulse
-    WHERE class IS NOT NULL
-  ") -> available
+    WHERE end_time - start_time < %f",
+    max_time_range
+  ) %>%
+    dbGetQuery(conn = conn) -> pulses
   poolReturn(conn)
-  pca$x[available$id, ] %>%
+
+  rn <- shapes$pulse
+  sapply(shapes$shape, identity, simplify = "array") %>%
+    pmax(0) %>%
+    pmin(255) %>%
+    `/`(255) -> shapes
+  dimnames(shapes)[[1]] <- sprintf("row_%02i", seq_len(size))
+  dimnames(shapes)[[3]] <- rn
+  pulses %>%
+    dplyr::select(-id) %>%
+    as.matrix() %>%
+    `dimnames<-`(list(pulses$id, colnames(pulses)[-1])) -> pulses
+  prcomp(pulses, center = TRUE, scale. = TRUE)$x %>%
+    round(2) %>%
     as.data.frame() %>%
-    bind_cols(available) -> dataset
-  available %>%
-    count(class) %>%
-    filter(n >= 40) %>%
-    mutate(
-      complement = nrow(available) - n,
-      df = floor(pmin(n, complement) / 20),
-      model = map2(class, df, ~fit_model(.x, .y, data = dataset))
-    )
+    do.call(what = order) %>%
+    `[`(seq(1, nrow(pulses), by = 10)) %>%
+    sort() -> validation
+  return(list(shapes = shapes, validation = validation))
 }
 
-add_prediction <- function(pool) {
+reshape_pulse <- function(shapes, validation, inverse = FALSE) {
+  if (!missing(validation)) {
+    if (inverse) {
+      shapes <- shapes[, , -validation, drop = FALSE]
+    } else {
+      shapes <- shapes[, , validation, drop = FALSE]
+    }
+  }
+  output_dims <- c(prod(dim(shapes)[1:2]), dim(shapes)[3])
+  shapes %>%
+    array_reshape(dim = output_dims, order = "F") %>%
+    t()
+}
+
+
+fit_autoencoder <- function(
+  shapes, batch_size = 100L, epochs = 50L, epsilon_std = 1.0
+) {
+  original_dim <- prod(dim(shapes$shapes)[1:2])
+  intermediate_dim <- 4 ^ (log(sqrt(original_dim), 2) - 2)
+  latent_dim <- floor(log(dim(shapes$shapes)[3] - length(shapes$validation)))
+
+  test <- reshape_pulse(shapes = shapes$shapes, validation = shapes$validation)
+  train <- reshape_pulse(shapes = shapes$shapes,
+                         validation = shapes$validation, inverse = TRUE)
+
+  x <- layer_input(shape = original_dim)
+  h <- layer_dense(x, intermediate_dim, activation = "relu")
+  z_mean <- layer_dense(h, latent_dim)
+  z_log_var <- layer_dense(h, latent_dim)
+
+  sampling <- function(arg){
+    z_mean <- arg[, seq_len(latent_dim)]
+    z_log_var <- arg[, latent_dim + seq_len(latent_dim)]
+
+    epsilon <- k_random_normal(
+      shape = c(k_shape(z_mean)[[1]]),
+      mean = 0,
+      stddev = epsilon_std
+    )
+
+    z_mean + k_exp(z_log_var / 2) * epsilon
+  }
+
+  z <- layer_concatenate(list(z_mean, z_log_var)) %>%
+    layer_lambda(sampling)
+
+  decoder_h <- layer_dense(units = intermediate_dim, activation = "relu")
+  decoder_mean <- layer_dense(units = original_dim, activation = "sigmoid")
+  h_decoded <- decoder_h(z)
+  x_decoded_mean <- decoder_mean(h_decoded)
+
+  vae <- keras_model(x, x_decoded_mean)
+
+  encoder <- keras_model(x, z_mean)
+
+  decoder_input <- layer_input(shape = latent_dim)
+  h_decoded_2 <- decoder_h(decoder_input)
+  x_decoded_mean_2 <- decoder_mean(h_decoded_2)
+  generator <- keras_model(decoder_input, x_decoded_mean_2)
+
+  vae_loss <- function(x, x_decoded_mean) {
+    xent_loss <- original_dim * loss_binary_crossentropy(x, x_decoded_mean)
+    kl_loss <- k_mean(1 + z_log_var - k_square(z_mean) - k_exp(z_log_var),
+                      axis = -1L) / -2
+    xent_loss + kl_loss
+  }
+
+  vae %>%
+    compile(optimizer = "rmsprop", loss = vae_loss) %>%
+    fit(train, train, shuffle = TRUE,  epochs = epochs, batch_size = batch_size,
+        validation_data = list(test, test)
+    )
+  return(list(encoder = encoder, decoder = generator))
+}
+
+update_autoencoder <- function(
+  pool, size = 2 ^ 15, max_time_range = 100, batch_size = 100L, epochs = 50L,
+  epsilon_std = 1.0
+) {
+  shapes <- get_shapes(
+    pool = pool, size = size, max_time_range = max_time_range
+  )
+  autoencoder <- fit_autoencoder(
+    shapes = shapes, batch_size = batch_size, epochs = epochs,
+    epsilon_std = epsilon_std
+  )
+
   conn <- poolCheckout(pool)
-  pca <- get_pca(pool)
-  get_models(pool, pca) %>%
-    mutate(
-      prediction = map(
-        model,
-        ~tibble(
-          pulse = rownames(pca$x) %>%
-            as.integer(),
-          prediction = predict(.x, newdata = as.data.frame(pca$x)) %>%
-            plogis()
-        )
-      ),
+
+  tibble(
+    type = c(1, -1),
+    model = list(autoencoder$encoder, autoencoder$decoder)
+  ) %>%
+    mutate(model = purrr::map(model, serialize_model)) %>%
+    dbWriteTable(conn = conn, name = "encoder", overwrite = TRUE)
+
+  n_ae <- floor(log(dim(shapes$shapes)[3] - length(shapes$validation)))
+  reshape_pulse(shapes$shapes) %>%
+    predict(object = autoencoder$encoder) %>%
+    `colnames<-`(sprintf("AE_%02i", seq_len(n_ae))) %>%
+    data.frame() %>%
+    mutate(pulse = as.integer(dimnames(shapes$shapes)[[3]])) %>%
+    dbWriteTable(conn = conn, name = "autoencoder", overwrite = TRUE)
+
+  poolReturn(conn)
+}
+
+fit_som <- function(pool, xdim, ydim) {
+  conn <- poolCheckout(pool)
+  dbListFields(conn, "autoencoder") %>%
+    str_subset("^AE_") %>%
+    paste(collapse = ", ") %>%
+    sprintf(fmt = "
+      SELECT
+        id,
+        peak_frequency,
+        peak_amplitude - select_amplitude AS signal_amplitude,
+        end_time - start_time AS time_range,
+        end_frequency - start_frequency AS frequency_range,
+        (peak_time - start_time) / (end_time - start_time) AS rel_time,
+        (peak_frequency - start_frequency) / (end_frequency - start_frequency) AS
+          rel_frequency,
+        %s
+      FROM pulse AS p
+      INNER JOIN autoencoder AS a ON p.id = a.pulse") %>%
+    dbGetQuery(conn = conn) -> dataset
+
+  grid_dim <- floor(log(nrow(dataset)))
+  if (missing(xdim)) {
+    xdim <- grid_dim
+  }
+  if (missing(ydim)) {
+    ydim <- grid_dim
+  }
+  dataset %>%
+    dplyr::select(-id) %>%
+    as.matrix() %>%
+    `rownames<-`(dataset$id) %>%
+    scale() %>%
+    som(grid = somgrid(xdim = xdim, ydim = ydim)) -> sommap
+
+  sprintf(
+    "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+  ) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(id) -> model_id
+  if (is.null(model_id)) {
+    tibble(id = NA, x_dim = xdim, y_dim = ydim) %>%
+      dbWriteTable(conn = conn, name = "model", append = TRUE)
+    sprintf(
+      "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
     ) %>%
-    select(class, prediction) %>%
-    unnest() %>%
-    dbWriteTable(conn = conn, name = "prediction", overwrite = TRUE)
+      dbGetQuery(conn = conn) %>%
+      pull(id) -> model_id
+  }
+  if (dbExistsTable(conn = conn, "node")) {
+    sommap$codes[[1]] %>%
+      as.data.frame() %>%
+      mutate(
+        id = NA_integer_,
+        model = model_id,
+        x_pos = 1 + (row_number() - 1) %/% xdim,
+        y_pos = 1 + (row_number() - 1) %% xdim
+      ) %>%
+      dbWriteTable(conn = conn, name = "node", append = TRUE)
+  } else {
+    sommap$codes[[1]] %>%
+      as.data.frame() %>%
+      mutate(
+        id = row_number(),
+        model = model_id,
+        x_pos = 1 + (id - 1) %/% xdim,
+        y_pos = 1 + (id - 1) %% xdim
+      ) %>%
+      dbWriteTable(
+        conn = conn, name = "node",
+        field.types = c(
+          id = "INTEGER PRIMARY KEY AUTOINCREMENT", model = "INTEGER NOT NULL",
+          x_pos = "INTEGER NOT NULL", y_pos = "INTEGER NOT NULL")
+      )
+  }
+  sprintf("SELECT min(id) - 1 AS node FROM node WHERE model = %i", model_id) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(node) -> start_node
+
+  tibble(
+    pulse = dataset$id,
+    node = sommap$unit.classif + start_node,
+    distance = sommap$distances
+  ) %>%
+    dbWriteTable(conn = conn, name = "prediction", append = TRUE)
+
   dbSendQuery(conn = conn, "VACUUM") %>%
     dbClearResult()
+
   poolReturn(conn)
-  return(NULL)
 }
 
 pool <- connect_pulse_db(

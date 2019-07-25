@@ -16,16 +16,12 @@ shinyServer(function(input, output, session) {
     data$spectrogram <- sample_spectrogram(pool)
   })
 
-  observeEvent(input$remodel, {
-    add_prediction(pool)
-  })
-
   observeEvent(data$spectrogram, {
+    data$current_pulse <- 1
     read_spectrogram(pool, data$spectrogram) %>%
       mutate(
         raster = shape2raster(.)
       ) -> data$raster
-    data$current_pulse <- 1
     if (input$skip_labeled) {
       while (
         data$current_pulse < nrow(data$raster) &&
