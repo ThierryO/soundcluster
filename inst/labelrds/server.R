@@ -5,20 +5,38 @@ library(raster)
 
 shinyServer(function(input, output, session) {
   data <- reactiveValues(
+    clamped = NULL,
     current_pulse = NULL,
     maximum = NULL,
+    pool = NULL,
     raster = NULL,
+    raw_spectrogram = NULL,
     spectrogram = NULL
   )
 
+  observeEvent(input$connect, {
+    if (!is.null(data$pool)) {
+      poolClose(pool = data$pool)
+    }
+    data$pool <- connect_pulse_db(path = input$path)
+    set_dropdown(session = session, pool = data$pool)
+    data$spectrogram <- sample_spectrogram(pool = data$pool)
+  })
+
   observeEvent(input$new_spectrogram, {
-    set_dropdown(session = session, pool = pool)
-    data$spectrogram <- sample_spectrogram(pool)
+    if (is.null(data$pool)) {
+      return(NULL)
+    }
+    set_dropdown(session = session, pool = data$pool)
+    data$spectrogram <- sample_spectrogram(pool = data$pool)
   })
 
   observeEvent(data$spectrogram, {
+    if (is.null(data$pool)) {
+      return(NULL)
+    }
     data$current_pulse <- 1
-    read_spectrogram(pool, data$spectrogram) %>%
+    read_spectrogram(pool = data$pool, spectrogram = data$spectrogram) %>%
       mutate(
         raster = shape2raster(.)
       ) -> data$raster
@@ -48,7 +66,59 @@ shinyServer(function(input, output, session) {
           max(data$raster$peak_amplitude)
         )
       )
+    if (file.exists(data$raster$filename[1])) {
+      conn <- poolCheckout(data$pool)
+      sprintf("
+        SELECT
+          s.window_ms, s.overlap, s.min_frequency, s.max_frequency,
+          r.duration, r.filename, r.sample_rate, r.te_factor, r.left_channel
+        FROM spectrogram AS s
+        INNER JOIN recording AS r ON s.recording = r.id
+        WHERE s.id = %i", data$spectrogram) %>%
+        dbGetQuery(conn = conn) -> metadata
+      poolReturn(conn)
+      sound_wav(
+        filename = metadata$filename,
+        channel = ifelse(metadata$left_channel == 1, "left", "right"),
+        te_factor = metadata$te_factor,
+        max_length = metadata$duration
+      ) %>%
+        sound_spectrogram(
+          window_ms = metadata$window_ms,
+          overlap = metadata$overlap,
+          frequency_range = c(metadata$min_frequency, metadata$max_frequency)
+        ) -> sonogram
+      sonogram@SpecGram$f <- sonogram@SpecGram$f / 1000
+      sonogram@SpecGram$t <- sonogram@SpecGram$t * 1000
+      data$raw_spectrogram <- raster(
+        sonogram@SpecGram$S[rev(seq_along(sonogram@SpecGram$f)), ],
+        xmn = min(sonogram@SpecGram$t),
+        xmx = max(sonogram@SpecGram$t),
+        ymn = min(sonogram@SpecGram$f),
+        ymx = max(sonogram@SpecGram$f)
+      )
+      data$clamped <- clamp(
+        data$raw_spectrogram,
+        lower = input$amplitude[1],
+        upper = input$amplitude[2]
+      )
+    }
   })
+
+  observeEvent(
+    input$amplitude,
+    {
+      if (is.null(data$raw_spectrogram)) {
+        data$clamped <- NULL
+      } else {
+        data$clamped <- clamp(
+          data$raw_spectrogram,
+          lower = input$amplitude[1],
+          upper = input$amplitude[2]
+        )
+      }
+    }
+  )
 
   observeEvent(
     input$step_forward,
@@ -130,8 +200,11 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$new_behaviour,
     {
+      if (is.null(data$pool)) {
+        return(NULL)
+      }
       if (input$behaviour_name != "") {
-        connection <- poolCheckout(pool)
+        connection <- poolCheckout(pool = data$pool)
         current <- dbGetQuery(
           connection,
           sprintf(
@@ -173,8 +246,11 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$new_species,
     {
+      if (is.null(data$pool)) {
+        return(NULL)
+      }
       if (input$species_name != "") {
-        connection <- poolCheckout(pool)
+        connection <- poolCheckout(pool = data$pool)
         current <- dbGetQuery(
           connection,
           sprintf(
@@ -235,12 +311,15 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$new_class,
     {
+      if (is.null(data$pool)) {
+        return(NULL)
+      }
       if (
         input$class_abbrev != "" &&
         input$species != "-1" &&
         input$behaviour != "-1"
       ) {
-        connection <- poolCheckout(pool)
+        connection <- poolCheckout(pool = data$pool)
         current <- dbGetQuery(
           connection,
           sprintf(
@@ -303,10 +382,13 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$update_class,
     {
+      if (is.null(data$pool)) {
+        return(NULL)
+      }
       if (as.integer(input$class_id) < 1) {
         return(NULL)
       }
-      connection <- poolCheckout(pool)
+      connection <- poolCheckout(pool = data$pool)
       res <- dbSendQuery(
         connection,
         sprintf(
@@ -343,13 +425,16 @@ shinyServer(function(input, output, session) {
   observeEvent(
     input$use_dominant,
     {
+      if (is.null(data$pool)) {
+        return(NULL)
+      }
       if (!"dominant" %in% colnames(data$raster)) {
         return(NULL)
       }
       if (is.na(data$raster$dominant[data$current_pulse])) {
         return(NULL)
       }
-      connection <- poolCheckout(pool)
+      connection <- poolCheckout(pool = data$pool)
       res <- dbSendQuery(
         connection,
         sprintf(
@@ -384,6 +469,13 @@ shinyServer(function(input, output, session) {
     }
   )
 
+  output$prediction <- renderText({
+    if (is.null(data$raster)) {
+      return(NULL)
+    }
+    data$raster$prediction[data$current_pulse]
+  })
+
   output$sonogram <- renderPlot({
     if (is.null(data$raster)) {
       return(NULL)
@@ -396,11 +488,28 @@ shinyServer(function(input, output, session) {
       arrange(select_amplitude, desc(end_time - start_time),
               desc(end_frequency - start_frequency)) -> selection
     breaks <- pretty(input$amplitude[1]:input$amplitude[2], 20)
-    extent(input$starttime, xmax = input$starttime + input$timeinterval,
-           ymin = input$frequency[1], ymax = input$frequency[2]
-    ) %>%
+    if (is.null(data$clamped)) {
+      extent(input$starttime, xmax = input$starttime + input$timeinterval,
+             ymin = input$frequency[1], ymax = input$frequency[2]
+      ) %>%
+        plot(
+          col = NA,
+          xlim = input$starttime + c(0, input$timeinterval),
+          ylim = input$frequency,
+          xlab = "time (ms)",
+          ylab = "frequency (kHz)",
+          asp = input$aspect,
+          main = selection$filename[1]
+        )
+      lapply(selection$raster, plot, add = TRUE, legend = FALSE,
+             breaks = breaks, col = topo.colors(length(breaks)))
+      plot(data$raster$raster[[data$current_pulse]], add = TRUE,
+           breaks = breaks, col = terrain.colors(length(breaks)))
+    } else {
       plot(
-        col = NA,
+        data$clamped,
+        breaks = breaks,
+        col = topo.colors(length(breaks)),
         xlim = input$starttime + c(0, input$timeinterval),
         ylim = input$frequency,
         xlab = "time (ms)",
@@ -408,10 +517,7 @@ shinyServer(function(input, output, session) {
         asp = input$aspect,
         main = selection$filename[1]
       )
-    lapply(selection$raster, plot, add = TRUE, legend = FALSE, breaks = breaks,
-             col = topo.colors(length(breaks)))
-    plot(data$raster$raster[[data$current_pulse]], add = TRUE, breaks = breaks,
-         col = terrain.colors(length(breaks)))
+    }
     rect(
       xleft = selection$start_time,
       xright = selection$end_time,
@@ -450,12 +556,5 @@ shinyServer(function(input, output, session) {
       pch = 13,
       cex = 2
     )
-  })
-
-  output$prediction <- renderText({
-    if (is.null(data$raster)) {
-      return(NULL)
-    }
-    data$raster$prediction[data$current_pulse]
   })
 })

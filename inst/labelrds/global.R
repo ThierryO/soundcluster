@@ -294,7 +294,7 @@ sample_spectrogram <- function(pool) {
       FROM cte_node
       GROUP BY spectrogram") %>%
     dbGetQuery(conn = conn) %>%
-    sample_n(size = 1, prob = weight) %>%
+    sample_n(size = 1, weight = weight) %>%
     pull(spectrogram) -> spectrogram
   poolReturn(conn)
   return(spectrogram)
@@ -724,10 +724,3 @@ fit_som <- function(pool, xdim, ydim) {
 
   poolReturn(conn)
 }
-
-pool <- connect_pulse_db(
-  path = file.path("~", "github", "thierryo", "vleermuizen", "soundpulse")
-)
-onStop(function() {
-  poolClose(pool)
-})

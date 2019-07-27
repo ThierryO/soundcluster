@@ -8,6 +8,8 @@ shinyUI(
       sidebarLayout(
         sidebarPanel(
           width = 2,
+          textInput("path", label = "db path", value = "~"),
+          actionButton("connect", label = "open connection"),
           actionButton("new_spectrogram", label = "refresh"),
           actionButton("step_backward", label = "<<<"),
           actionButton("step_forward", label = ">>>"),
@@ -101,7 +103,7 @@ shinyUI(
           )
         ),
         mainPanel(
-          plotOutput("sonogram", height = "1200px")
+          plotOutput("sonogram", height = "850px")
         )
       )
     )
