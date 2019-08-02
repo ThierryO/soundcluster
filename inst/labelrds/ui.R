@@ -14,8 +14,10 @@ shinyUI(
           actionButton("step_backward", label = "<<<"),
           actionButton("step_forward", label = ">>>"),
           checkboxInput("skip_labeled", label = "skip labeled", value = TRUE),
-          textOutput("prediction"),
+          checkboxInput("raw_spectrogram", label = "display raw spectrogram",
+                        value = TRUE),
           actionButton("use_dominant", label = "use dominant class"),
+          textOutput("prediction"),
           selectizeInput(
             "class_id", label = "class",
             choices = c("[no class]" = "0", "[new class]" = "-1"),

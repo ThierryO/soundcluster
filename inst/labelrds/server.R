@@ -488,7 +488,7 @@ shinyServer(function(input, output, session) {
       arrange(select_amplitude, desc(end_time - start_time),
               desc(end_frequency - start_frequency)) -> selection
     breaks <- pretty(input$amplitude[1]:input$amplitude[2], 20)
-    if (is.null(data$clamped)) {
+    if (is.null(data$clamped) | !input$raw_spectrogram) {
       extent(input$starttime, xmax = input$starttime + input$timeinterval,
              ymin = input$frequency[1], ymax = input$frequency[2]
       ) %>%
