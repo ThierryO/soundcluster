@@ -287,7 +287,7 @@ sample_spectrogram <- function(pool) {
         SUM(
           CASE
             WHEN node = %1$i
-            THEN 10 * to_do / (done + 0.1)
+            THEN 100 * to_do / (done + 0.1)
             ELSE to_do / (done + 0.1)
             END
         ) AS weight
