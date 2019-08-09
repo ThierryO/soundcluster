@@ -32,7 +32,7 @@ shinyServer(function(input, output, session) {
       conn,
       "WITH cte_model AS (
         SELECT
-          m.id, m.x_dim, m.y_dim,
+          m.id, m.x_dim, m.y_dim, m.model_type,
           COUNT(pr.pulse) AS predictions
         FROM model AS m
         INNER JOIN node AS n ON m.id = n.model
@@ -42,7 +42,8 @@ shinyServer(function(input, output, session) {
 
       SELECT
         id,
-        id || ': ' || x_dim || 'x' || y_dim || ' (' || predictions || ')'
+        id || ': ' || model_type || ' ' || x_dim || 'x' || y_dim ||
+          ' (' || predictions || ')'
           AS label
       FROM cte_model
       ORDER BY id"
@@ -93,7 +94,8 @@ shinyServer(function(input, output, session) {
             shannon = round(shannon, 2)
           ),
         by = "node"
-      ) -> data$nodes
+      ) %>%
+      arrange(shannon, labeled) -> data$nodes
     poolReturn(conn)
 
     output$dt_node_quality <- DT::renderDataTable(

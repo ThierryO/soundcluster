@@ -118,6 +118,7 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
     connection,
     "CREATE TABLE IF NOT EXISTS model (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_type TEXT NOT NULL,
       x_dim INTEGER NOT NULL,
       y_dim INTEGER NOT NULL
     )"
@@ -599,6 +600,161 @@ update_autoencoder <- function(
   poolReturn(conn)
 }
 
+fit_xyf <- function(pool, xdim, ydim) {
+  conn <- poolCheckout(pool)
+  dbListFields(conn, "autoencoder") %>%
+    str_subset("^AE_") %>%
+    paste(collapse = ", ") %>%
+    sprintf(fmt = "
+      WITH cte_relevant AS (
+        SELECT class, abbreviation
+        FROM pulse
+        INNER JOIN class ON pulse.class = class.id
+        GROUP BY class
+        HAVING COUNT(pulse.id) >= 10
+      )
+
+      SELECT
+        id,
+        c.class,
+        abbreviation,
+        peak_frequency,
+        peak_amplitude - select_amplitude AS signal_amplitude,
+        end_time - start_time AS time_range,
+        end_frequency - start_frequency AS frequency_range,
+        (peak_time - start_time) / (end_time - start_time) AS rel_time,
+        (peak_frequency - start_frequency) / (end_frequency - start_frequency) AS
+          rel_frequency,
+        %s
+      FROM pulse AS p
+      INNER JOIN autoencoder AS a ON p.id = a.pulse
+      LEFT JOIN cte_relevant AS c ON p.class = c.class") %>%
+    dbGetQuery(conn = conn) %>%
+    mutate(abbreviation = factor(abbreviation)) -> dataset
+
+  grid_dim <- floor(log(sum(!is.na(dataset$class))))
+  if (missing(xdim)) {
+    xdim <- grid_dim
+  }
+  if (missing(ydim)) {
+    ydim <- grid_dim
+  }
+  dataset %>%
+    filter(!is.na(class)) %>%
+    dplyr::select(-id, -class, -abbreviation) %>%
+    as.matrix() %>%
+    `rownames<-`(dataset$id[!is.na(dataset$class)]) %>%
+    scale() -> X
+  xyf(X = X, Y = dataset$abbreviation[!is.na(dataset$class)],
+      grid = somgrid(xdim = xdim, ydim = ydim)) -> sommap
+
+  sprintf(
+    "SELECT id
+    FROM model
+    WHERE x_dim = %i AND y_dim = %i AND model_type = 'xyf'", xdim, ydim
+  ) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(id) -> model_id
+  if (length(model_id) == 0) {
+    tibble(id = NA, x_dim = xdim, y_dim = ydim, model_type = "xyf") %>%
+      dbWriteTable(conn = conn, name = "model", append = TRUE)
+    sprintf(
+      "SELECT id
+      FROM model
+      WHERE x_dim = %i AND y_dim = %i AND model_type = 'xyf'", xdim, ydim
+    ) %>%
+      dbGetQuery(conn = conn) %>%
+      pull(id) -> model_id
+  } else {
+    sprintf(
+      "DELETE FROM prediction
+      WHERE EXISTS (
+        SELECT pr.node
+        FROM prediction AS pr
+        INNER JOIN node AS n ON pr.node = n.id
+        WHERE n.model = %i AND pr.node = prediction.node
+      )", model_id
+    ) %>%
+      dbSendQuery(conn = conn) %>%
+      dbClearResult()
+    sprintf(
+      "DELETE FROM node
+      WHERE EXISTS (
+        SELECT id
+        FROM node AS n
+        WHERE n.model = %i AND n.id = node.id
+      )", model_id
+    ) %>%
+      dbSendQuery(conn = conn) %>%
+      dbClearResult()
+  }
+  if (dbExistsTable(conn = conn, "node")) {
+    do.call(cbind, sommap$codes) %>%
+      as.data.frame() %>%
+      mutate(
+        id = NA_integer_,
+        model = model_id,
+        x_pos = 1 + (row_number() - 1) %/% xdim,
+        y_pos = 1 + (row_number() - 1) %% xdim
+      ) -> to_store
+    colnames(to_store) <- gsub(" ", "_", colnames(to_store))
+    available <- colnames(to_store) %in% dbListFields(conn, "node")
+    if (!all(available)) {
+      colnames(to_store)[!available] %>%
+        sprintf(fmt = "ALTER TABLE node ADD COLUMN %s REAL") %>%
+        lapply(
+          function(x){
+            dbSendQuery(conn = conn, x) %>%
+              dbClearResult()
+          }
+        )
+    }
+    dbWriteTable(to_store, conn = conn, name = "node", append = TRUE)
+  } else {
+    do.call(cbind, sommap$codes) %>%
+      as.data.frame() %>%
+      mutate(
+        id = row_number(),
+        model = model_id,
+        x_pos = 1 + (id - 1) %/% xdim,
+        y_pos = 1 + (id - 1) %% xdim
+      )  -> to_store
+    colnames(to_store) <- gsub(" ", "_", colnames(to_store))
+    dbWriteTable(
+      to_store,
+      conn = conn, name = "node",
+      field.types = c(
+        id = "INTEGER PRIMARY KEY AUTOINCREMENT", model = "INTEGER NOT NULL",
+        x_pos = "INTEGER NOT NULL", y_pos = "INTEGER NOT NULL")
+    )
+  }
+  sprintf("SELECT min(id) - 1 AS node FROM node WHERE model = %i", model_id) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(node) -> start_node
+
+  dataset %>%
+    dplyr::select(-id, -class, -abbreviation) %>%
+    as.matrix() %>%
+    `rownames<-`(dataset$id) %>%
+    scale(
+      center = attr(X, "scaled:center"),
+      scale = attr(X, "scaled:scale")
+    ) -> to_predict
+  predictions <- predict(object = sommap, newdata = to_predict, whatmap = 1)
+
+  tibble(
+    pulse = dataset$id,
+    node = predictions$unit.classif + start_node,
+    distance = sqrt(rowSums((predictions$predictions[[1]] - to_predict) ^ 2))
+  ) %>%
+    dbWriteTable(conn = conn, name = "prediction", append = TRUE)
+
+  dbSendQuery(conn = conn, "VACUUM") %>%
+    dbClearResult()
+
+  poolReturn(conn)
+}
+
 fit_supersom <- function(pool, xdim, ydim) {
   conn <- poolCheckout(pool)
   dbListFields(conn, "autoencoder") %>%
@@ -642,15 +798,19 @@ fit_supersom <- function(pool, xdim, ydim) {
     supersom(grid = somgrid(xdim = xdim, ydim = ydim)) -> sommap
 
   sprintf(
-    "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+    "SELECT id
+    FROM model
+    WHERE x_dim = %i AND y_dim = %i AND model = 'supersom'", xdim, ydim
   ) %>%
     dbGetQuery(conn = conn) %>%
     pull(id) -> model_id
   if (length(model_id) == 0) {
-    tibble(id = NA, x_dim = xdim, y_dim = ydim) %>%
+    tibble(id = NA, x_dim = xdim, y_dim = ydim, model_type = "supersom") %>%
       dbWriteTable(conn = conn, name = "model", append = TRUE)
     sprintf(
-      "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+      "SELECT id
+      FROM model
+      WHERE x_dim = %i AND y_dim = %i AND model = 'supersom'", xdim, ydim
     ) %>%
       dbGetQuery(conn = conn) %>%
       pull(id) -> model_id
@@ -733,15 +893,17 @@ fit_som <- function(pool, xdim, ydim) {
     som(grid = somgrid(xdim = xdim, ydim = ydim)) -> sommap
 
   sprintf(
-    "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+    "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i AND model = 'som'",
+    xdim, ydim
   ) %>%
     dbGetQuery(conn = conn) %>%
     pull(id) -> model_id
   if (is.null(model_id)) {
-    tibble(id = NA, x_dim = xdim, y_dim = ydim) %>%
+    tibble(id = NA, x_dim = xdim, y_dim = ydim, model_type = "som") %>%
       dbWriteTable(conn = conn, name = "model", append = TRUE)
     sprintf(
-      "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+      "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i AND model = 'som'",
+      xdim, ydim
     ) %>%
       dbGetQuery(conn = conn) %>%
       pull(id) -> model_id
