@@ -300,20 +300,22 @@ sample_spectrogram <- function(pool) {
   return(spectrogram)
 }
 
-read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5) {
+read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5, model) {
   conn <- poolCheckout(pool)
-  sprintf("col_%02i", seq_len(size)) %>%
+  sprintf("s.col_%02i", seq_len(size)) %>%
     paste(collapse = ", ") %>%
     sprintf(fmt = "
-      SELECT pulse AS id, %s
-      FROM pulse
-      INNER JOIN shape ON pulse.id = shape.pulse
-      WHERE spectrogram = %i
-      ORDER BY pulse, row",
-      spectrogram
+      SELECT p.id AS id, pr.node, %s
+      FROM pulse AS p
+      INNER JOIN shape AS s ON p.id = s.pulse
+      LEFT JOIN prediction AS pr ON p.id = pr.pulse
+      INNER JOIN node AS n ON pr.node = n.id
+      WHERE spectrogram = %i AND (n.model IS NULL OR n.model = %s)
+      ORDER BY p.id, s.row",
+      spectrogram, model
     ) %>%
     dbGetQuery(conn = conn) %>%
-    group_by(id) %>%
+    group_by(id, node) %>%
     nest(.key = "shape") %>%
     mutate(shape = purrr::map(shape, as.matrix) %>%
              purrr::map(`/`, 256)) %>%
@@ -345,45 +347,8 @@ read_spectrogram <- function(pool, spectrogram, size = 2 ^ 5) {
       by = "id"
     ) %>%
     left_join(
-      sprintf("
-        WITH cte_class AS (
-          SELECT pr.node, p.class, SUM(1 / pr.distance) AS weight
-          FROM pulse AS p
-          INNER JOIN prediction AS pr ON p.id = pr.pulse
-          WHERE p.class IS NOT NULL
-          GROUP BY pr.node, p.class
-        ),
-        cte_total AS (
-          SELECT node, SUM(weight) AS tot
-          FROM cte_class
-          GROUP BY node
-        ),
-        cte_weight AS (
-          SELECT
-            c.node, c.class, cl.abbreviation,
-            100 * c.weight / t.tot AS prediction
-          FROM cte_class AS c
-          INNER JOIN class AS cl ON c.class = cl.id
-          INNER JOIN cte_total AS t ON c.node = t.node
-        )
-
-        SELECT p.id, w.class, w.abbreviation, w.prediction
-        FROM cte_weight AS w
-        INNER JOIN prediction AS pr ON pr.node = w.node
-        INNER JOIN pulse AS p ON pr.pulse = p.id
-        WHERE p.spectrogram = %i
-        ORDER BY p.id, w.prediction DESC", spectrogram
-      ) %>%
-        dbGetQuery(conn = conn) %>%
-        mutate(
-          prediction = sprintf("%s (%.0f%%)", abbreviation, prediction)
-        ) %>%
-        group_by(id) %>%
-        summarise(
-          dominant = class[1],
-          prediction = paste(prediction, collapse = ", ")
-        ),
-      by = "id"
+      node_prediction(pool, model),
+      by = "node"
     ) %>%
     arrange(start_time + end_time, peak_frequency, select_amplitude) ->
     sound_pulse
@@ -723,4 +688,77 @@ fit_som <- function(pool, xdim, ydim) {
     dbClearResult()
 
   poolReturn(conn)
+}
+
+node_prediction <- function(pool, model) {
+  conn <- poolCheckout(pool)
+  dbQuoteLiteral(conn = conn, model) %>%
+    sprintf(fmt = "
+WITH cte_weight AS (
+  SELECT pr.node, c.id AS class, c.abbreviation, SUM(1 / pr.distance) AS weight
+  FROM prediction AS pr
+  INNER JOIN node AS n ON pr.node = n.id
+  INNER JOIN pulse AS p ON pr.pulse = p.id
+  INNER JOIN class AS c ON p.class = c.id
+  WHERE n.model = %s AND p.class IS NOT NULL
+  GROUP BY pr.node, c.abbreviation
+),
+cte_total AS (
+  SELECT node, SUM(weight) AS tot_weight
+  FROM cte_weight
+  GROUP BY node
+),
+cte_relweight AS (
+  SELECT
+    w.node,
+    w.class,
+    w.abbreviation,
+    w.weight / t.tot_weight AS weight,
+    w.abbreviation || ' (' ||
+      CAST(ROUND(100 * w.weight / t.tot_weight) AS INT) || '%%)' AS text
+  FROM cte_weight AS w
+  INNER JOIN cte_total AS t ON w.node = t.node
+  ORDER BY w.node, w.weight DESC
+),
+cte_concat AS (
+  SELECT
+    node,
+    GROUP_CONCAT(text, ', ') AS prediction,
+    -SUM(weight * LOG(weight)) AS shannon
+  FROM cte_relweight
+  GROUP BY node
+)
+SELECT r.node, class AS dominant, abbreviation, weight, prediction, shannon
+FROM cte_relweight AS r
+INNER JOIN cte_concat AS c ON r.node = c.node
+GROUP BY r.node
+HAVING weight = MAX(weight)") %>%
+    dbGetQuery(conn = conn) -> prediction
+  poolReturn(conn)
+  return(prediction)
+}
+
+spectrogram_prediction <- function(pool, model) {
+  conn <- poolCheckout(data$pool)
+  dbQuoteLiteral(conn = conn, model) %>%
+    sprintf(fmt = "
+SELECT p.spectrogram, pr.node, COUNT(p.id) AS n
+FROM pulse AS p
+LEFT JOIN prediction AS pr ON p.id = pr.pulse
+INNER JOIN node AS n ON pr.node = n.id
+WHERE model = %s AND class IS NULL
+GROUP BY p.spectrogram, pr.node") %>%
+    dbGetQuery(conn = conn) %>%
+    inner_join(
+      node_prediction(pool = pool, model = model) %>%
+        select(node, abbreviation, weight),
+      by = "node"
+    ) %>%
+    group_by(spectrogram, abbreviation) %>%
+    summarise_at(c("n", "weight"), sum) %>%
+    mutate(text = sprintf("%s (%i, %.0f%%)", abbreviation, n,
+                          100 * weight / n)) %>%
+    arrange(desc(weight)) -> prediction
+  poolReturn(conn)
+  return(prediction)
 }

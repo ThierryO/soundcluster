@@ -20,15 +20,146 @@ shinyServer(function(input, output, session) {
     }
     data$pool <- connect_pulse_db(path = input$path)
     set_dropdown(session = session, pool = data$pool)
-    data$spectrogram <- sample_spectrogram(pool = data$pool)
   })
 
-  observeEvent(input$new_spectrogram, {
+  observeEvent(input$refresh_model, {
     if (is.null(data$pool)) {
       return(NULL)
     }
     set_dropdown(session = session, pool = data$pool)
-    data$spectrogram <- sample_spectrogram(pool = data$pool)
+    conn <- poolCheckout(data$pool)
+    dbGetQuery(
+      conn,
+      "WITH cte_model AS (
+        SELECT
+          m.id, m.x_dim, m.y_dim,
+          COUNT(pr.pulse) AS predictions
+        FROM model AS m
+        INNER JOIN node AS n ON m.id = n.model
+        LEFT JOIN prediction AS pr ON n.id = pr.node
+        GROUP BY m.id, m.x_dim, m.y_dim
+      )
+
+      SELECT
+        id,
+        id || ': ' || x_dim || 'x' || y_dim || ' (' || predictions || ')'
+          AS label
+      FROM cte_model
+      ORDER BY id"
+    ) -> models
+    poolReturn(conn)
+
+    updateSelectInput(
+      session,
+      "node_model",
+      choices = setNames(models$id, models$label),
+      selected = head(models$id, 1)
+    )
+  })
+
+  observeEvent(input$node_model, {
+    if (input$node_model == "") {
+      return(NULL)
+    }
+    if (is.null(data$pool)) {
+      return(NULL)
+    }
+    conn <- poolCheckout(data$pool)
+    dbQuoteLiteral(
+      conn,
+      input$node_model
+    ) %>%
+      sprintf(
+        fmt = "
+  SELECT
+    n.id AS node, n.x_pos, n.y_pos,
+    COUNT(pr.pulse) AS pulses,
+    SUM(p.class IS NOT NULL) AS labeled,
+    SUM(p.class IS NULL) AS unlabeled,
+    ROUND(MIN(distance), 2) AS min_dist,
+    ROUND(MAX(distance), 2) AS max_dist
+  FROM prediction AS pr
+  INNER JOIN node AS n ON pr.node = n.id
+  INNER JOIN pulse AS p on pr.pulse = p.id
+  WHERE n.model = %s
+  GROUP BY n.id, n.x_pos, n.y_pos") %>%
+      dbGetQuery(conn = conn) %>%
+      inner_join(
+        node_prediction(pool = data$pool, model = input$node_model) %>%
+          transmute(
+            node,
+            dominant = abbreviation,
+            prediction,
+            shannon = round(shannon, 2)
+          ),
+        by = "node"
+      ) -> data$nodes
+    poolReturn(conn)
+
+    output$dt_node_quality <- DT::renderDataTable(
+      DT::datatable(
+        data$nodes,
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
+  })
+
+  observeEvent(input$dt_node_quality_rows_selected, {
+    if (is.null(input$dt_node_quality_rows_selected)) {
+      return(NULL)
+    }
+
+    conn <- poolCheckout(data$pool)
+    dbQuoteLiteral(
+      conn,
+      data$nodes$node[input$dt_node_quality_rows_selected]
+    ) %>%
+      sprintf(fmt = "
+      WITH cte_spectrogram AS (
+        SELECT
+          p.spectrogram,
+          COUNT(pr.pulse) AS predictions,
+          SUM(p.class IS NULL) AS unlabeled,
+          MIN(pr.distance) AS min_dist,
+          MAX(pr.distance) AS max_dist
+        FROM prediction AS pr
+        INNER JOIN pulse AS p ON pr.pulse = p.id
+        WHERE pr.node = %s
+        GROUP BY p.spectrogram
+      )
+
+      SELECT
+        s.id AS spectrogram, cs.predictions, cs.unlabeled,
+        ROUND(cs.min_dist, 1) AS 'min. distance',
+        ROUND(cs.max_dist, 1) AS 'max. distance',
+        r.filename
+      FROM cte_spectrogram AS cs
+      INNER JOIN spectrogram AS s ON cs.spectrogram = s.id
+      INNER JOIN recording AS r ON s.recording = r.id
+      ORDER BY unlabeled DESC, max_dist DESC"
+    ) %>%
+      dbGetQuery(conn = conn) -> data$spectrograms
+    poolReturn(conn)
+
+    output$dt_node_quality_spectrogram <- DT::renderDataTable(
+      DT::datatable(
+        data$spectrograms[, -1:-2],
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
+  })
+
+  observeEvent(input$dt_node_quality_spectrogram_rows_selected, {
+    if (is.null(input$dt_node_quality_spectrogram_rows_selected)) {
+      return(NULL)
+    }
+    data$spectrogram <- data$spectrograms$spectrogram[
+      input$dt_node_quality_spectrogram_rows_selected
+    ]
   })
 
   observeEvent(data$spectrogram, {
@@ -36,7 +167,8 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
     data$current_pulse <- 1
-    read_spectrogram(pool = data$pool, spectrogram = data$spectrogram) %>%
+    read_spectrogram(pool = data$pool, spectrogram = data$spectrogram,
+                     model = input$node_model) %>%
       mutate(
         raster = shape2raster(.)
       ) -> data$raster
@@ -178,6 +310,8 @@ shinyServer(function(input, output, session) {
         "class_id",
         selected = as.character(data$raster$class[data$current_pulse])
       )
+      updateActionButton(session, "use_dominant",
+                         label = data$raster$abbreviation[data$current_pulse])
     }
   )
 

@@ -4,13 +4,21 @@ shinyUI(
   navbarPage(
     title = "Soundcluster",
     tabPanel(
+      "Validate model",
+      textInput("path", label = "db path", value = "~"),
+      actionButton("connect", label = "open connection"),
+      actionButton("refresh_model", "Display all models"),
+      selectizeInput(
+        "node_model", label = "Model", choices = character(0), width = "400px"
+      ),
+      DT::dataTableOutput("dt_node_quality"),
+      DT::dataTableOutput("dt_node_quality_spectrogram")
+    ),
+    tabPanel(
       "Check pulses",
       sidebarLayout(
         sidebarPanel(
           width = 2,
-          textInput("path", label = "db path", value = "~"),
-          actionButton("connect", label = "open connection"),
-          actionButton("new_spectrogram", label = "refresh"),
           actionButton("step_backward", label = "<<<"),
           actionButton("step_forward", label = ">>>"),
           checkboxInput("skip_labeled", label = "skip labeled", value = TRUE),
