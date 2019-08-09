@@ -599,6 +599,105 @@ update_autoencoder <- function(
   poolReturn(conn)
 }
 
+fit_supersom <- function(pool, xdim, ydim) {
+  conn <- poolCheckout(pool)
+  dbListFields(conn, "autoencoder") %>%
+    str_subset("^AE_") %>%
+    paste(collapse = ", ") %>%
+    sprintf(fmt = "
+      SELECT
+        id,
+        peak_frequency,
+        peak_amplitude - select_amplitude AS signal_amplitude,
+        end_time - start_time AS time_range,
+        end_frequency - start_frequency AS frequency_range,
+        (peak_time - start_time) / (end_time - start_time) AS rel_time,
+        (peak_frequency - start_frequency) / (end_frequency - start_frequency) AS
+          rel_frequency,
+        %s
+      FROM pulse AS p
+      INNER JOIN autoencoder AS a ON p.id = a.pulse") %>%
+    dbGetQuery(conn = conn) -> dataset
+
+  grid_dim <- floor(log(nrow(dataset)))
+  if (missing(xdim)) {
+    xdim <- grid_dim
+  }
+  if (missing(ydim)) {
+    ydim <- grid_dim
+  }
+  list(
+    location = dataset %>%
+      dplyr::select(-id) %>%
+      dplyr::select(-starts_with("AE")) %>%
+      as.matrix() %>%
+      `rownames<-`(dataset$id) %>%
+      scale(),
+    autoencoder = dataset %>%
+      dplyr::select(starts_with("AE")) %>%
+      as.matrix() %>%
+      `rownames<-`(dataset$id) %>%
+      scale()
+  ) %>%
+    supersom(grid = somgrid(xdim = xdim, ydim = ydim)) -> sommap
+
+  sprintf(
+    "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+  ) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(id) -> model_id
+  if (length(model_id) == 0) {
+    tibble(id = NA, x_dim = xdim, y_dim = ydim) %>%
+      dbWriteTable(conn = conn, name = "model", append = TRUE)
+    sprintf(
+      "SELECT id FROM model WHERE x_dim = %i AND y_dim = %i", xdim, ydim
+    ) %>%
+      dbGetQuery(conn = conn) %>%
+      pull(id) -> model_id
+  }
+  if (dbExistsTable(conn = conn, "node")) {
+    do.call(cbind, sommap$codes) %>%
+      as.data.frame() %>%
+      mutate(
+        id = NA_integer_,
+        model = model_id,
+        x_pos = 1 + (row_number() - 1) %/% xdim,
+        y_pos = 1 + (row_number() - 1) %% xdim
+      ) %>%
+      dbWriteTable(conn = conn, name = "node", append = TRUE)
+  } else {
+    do.call(cbind, sommap$codes) %>%
+      as.data.frame() %>%
+      mutate(
+        id = row_number(),
+        model = model_id,
+        x_pos = 1 + (id - 1) %/% xdim,
+        y_pos = 1 + (id - 1) %% xdim
+      ) %>%
+      dbWriteTable(
+        conn = conn, name = "node",
+        field.types = c(
+          id = "INTEGER PRIMARY KEY AUTOINCREMENT", model = "INTEGER NOT NULL",
+          x_pos = "INTEGER NOT NULL", y_pos = "INTEGER NOT NULL")
+      )
+  }
+  sprintf("SELECT min(id) - 1 AS node FROM node WHERE model = %i", model_id) %>%
+    dbGetQuery(conn = conn) %>%
+    pull(node) -> start_node
+
+  tibble(
+    pulse = dataset$id,
+    node = sommap$unit.classif + start_node,
+    distance = sommap$distances
+  ) %>%
+    dbWriteTable(conn = conn, name = "prediction", append = TRUE)
+
+  dbSendQuery(conn = conn, "VACUUM") %>%
+    dbClearResult()
+
+  poolReturn(conn)
+}
+
 fit_som <- function(pool, xdim, ydim) {
   conn <- poolCheckout(pool)
   dbListFields(conn, "autoencoder") %>%
