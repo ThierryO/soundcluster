@@ -5,7 +5,9 @@ library(raster)
 
 shinyServer(function(input, output, session) {
   data <- reactiveValues(
+    candidates = NULL,
     clamped = NULL,
+    class = NULL,
     current_pulse = NULL,
     maximum = NULL,
     pool = NULL,
@@ -20,6 +22,21 @@ shinyServer(function(input, output, session) {
     }
     data$pool <- connect_pulse_db(path = input$path)
     set_dropdown(session = session, pool = data$pool)
+    data$class <- class_count(pool = data$pool)
+  })
+
+  observeEvent(data$class, {
+    if (is.null(data$class)) {
+      return(NULL)
+    }
+    output$dt_class <- DT::renderDataTable(
+      DT::datatable(
+        data$class,
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
   })
 
   observeEvent(input$refresh_model, {
@@ -155,6 +172,26 @@ shinyServer(function(input, output, session) {
     )
   })
 
+  observeEvent(input$dt_class_rows_selected, {
+    if (is.null(input$dt_class_rows_selected)) {
+      return(NULL)
+    }
+    if (is.null(input$node_model)) {
+      return(NULL)
+    }
+    data$candidates <- candidate_spectrogram(
+      pool = data$pool, model = input$node_model,
+      class = data$class$class[input$dt_class_rows_selected])
+    output$dt_class_spectrogram <- DT::renderDataTable(
+      DT::datatable(
+        data$candidates,
+        rownames = FALSE,
+        selection = "single",
+        options = list(lengthMenu = 5, pageLength = 5)
+      )
+    )
+  })
+
   observeEvent(input$dt_node_quality_spectrogram_rows_selected, {
     if (is.null(input$dt_node_quality_spectrogram_rows_selected)) {
       return(NULL)
@@ -164,10 +201,21 @@ shinyServer(function(input, output, session) {
     ]
   })
 
+  observeEvent(input$dt_class_spectrogram_rows_selected, {
+    if (is.null(input$dt_class_spectrogram_rows_selected)) {
+      return(NULL)
+    }
+    data$spectrogram <- data$candidates$spectrogram[
+      input$dt_class_spectrogram_rows_selected
+    ]
+  })
+
   observeEvent(data$spectrogram, {
     if (is.null(data$pool)) {
       return(NULL)
     }
+    data$class <- class_count(pool = data$pool)
+
     data$current_pulse <- 1
     read_spectrogram(pool = data$pool, spectrogram = data$spectrogram,
                      model = input$node_model) %>%

@@ -15,6 +15,11 @@ shinyUI(
       DT::dataTableOutput("dt_node_quality_spectrogram")
     ),
     tabPanel(
+      "Classification overview",
+      DT::dataTableOutput("dt_class"),
+      DT::dataTableOutput("dt_class_spectrogram")
+    ),
+    tabPanel(
       "Check pulses",
       sidebarLayout(
         sidebarPanel(

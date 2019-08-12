@@ -1000,7 +1000,7 @@ HAVING weight = MAX(weight)") %>%
 }
 
 spectrogram_prediction <- function(pool, model) {
-  conn <- poolCheckout(data$pool)
+  conn <- poolCheckout(pool)
   dbQuoteLiteral(conn = conn, model) %>%
     sprintf(fmt = "
 SELECT p.spectrogram, pr.node, COUNT(p.id) AS n
@@ -1012,7 +1012,7 @@ GROUP BY p.spectrogram, pr.node") %>%
     dbGetQuery(conn = conn) %>%
     inner_join(
       node_prediction(pool = pool, model = model) %>%
-        select(node, abbreviation, weight),
+        dplyr::select(node, abbreviation, weight),
       by = "node"
     ) %>%
     group_by(spectrogram, abbreviation) %>%
@@ -1022,4 +1022,79 @@ GROUP BY p.spectrogram, pr.node") %>%
     arrange(desc(weight)) -> prediction
   poolReturn(conn)
   return(prediction)
+}
+
+class_count <- function(pool) {
+  conn <- poolCheckout(pool)
+  dbGetQuery(conn = conn, "
+      WITH cte AS (
+        SELECT
+          class,
+          spectrogram,
+          COUNT(pulse.id) AS n_pulse
+        FROM pulse
+        WHERE class IS NOT NULL
+        GROUP BY class, spectrogram
+      )
+
+      SELECT
+        id AS class, abbreviation, description, COUNT(spectrogram) AS n_spectrogram,
+        SUM(n_pulse) AS n_pulse
+      FROM cte
+      INNER JOIN class ON cte.class = class.id
+      GROUP BY abbreviation") %>%
+    arrange(n_spectrogram, n_pulse) -> dt_class
+  poolReturn(conn)
+  return(dt_class)
+}
+
+candidate_spectrogram <- function(pool, model, class) {
+  conn <- poolCheckout(pool)
+  dbQuoteLiteral(conn = conn, model) %>%
+    sprintf(fmt = "
+      WITH cte_weight AS (
+        SELECT pr.node, c.id AS class, SUM(1 / pr.distance) AS weight
+        FROM prediction AS pr
+        INNER JOIN node AS n ON pr.node = n.id
+        INNER JOIN pulse AS p ON pr.pulse = p.id
+        INNER JOIN class AS c ON p.class = c.id
+        WHERE n.model = %s AND p.class IS NOT NULL
+        GROUP BY pr.node, c.abbreviation
+      ),
+      cte_total AS (
+        SELECT node, SUM(weight) AS tot_weight
+        FROM cte_weight
+        GROUP BY node
+      ),
+      cte_node AS (
+        SELECT
+          w.node,
+          w.class,
+          w.weight / t.tot_weight AS weight
+        FROM cte_weight AS w
+        INNER JOIN cte_total AS t ON w.node = t.node
+        WHERE w.class = %s
+        ORDER BY w.node, w.weight DESC
+      )
+
+      SELECT
+        p.spectrogram,
+        COUNT(p.id) AS n,
+        SUM(c.weight / pr.distance) AS weight,
+        MAX(c.weight / pr.distance) AS max_weight,
+        r.filename
+      FROM prediction AS pr
+      INNER JOIN cte_node AS c ON pr.node = c.node
+      INNER JOIN pulse AS p ON p.id = pr.pulse
+      INNER JOIN spectrogram AS s ON p.spectrogram = s.id
+      INNER JOIN recording AS r ON r.id = s.recording
+      WHERE p.class IS NULL
+      GROUP BY p.spectrogram
+      ORDER BY COUNT(p.id) DESC",
+      dbQuoteLiteral(conn = conn, class)
+    ) %>%
+    dbGetQuery(conn = conn) %>%
+    mutate_at(c("weight", "max_weight"), signif, digits = 3) -> candidates
+  poolReturn(conn)
+  return(candidates)
 }
