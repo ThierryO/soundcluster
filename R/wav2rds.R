@@ -37,6 +37,12 @@ wav2rds <- function(
     if (existing == "skip" && file_test("-f", target)) {
       return(NULL)
     }
+    if (existing == "append" && file_test("-f", target)) {
+      done <- readRDS(target)
+      if (threshold_amplitude %in% done@Pulse$select_amplitude) {
+        return(NULL)
+      }
+    }
     wav <- sound_wav(
       filename = path,
       channel = channel,
@@ -53,7 +59,7 @@ wav2rds <- function(
       dimensions = dimensions
     )
     if (existing == "append" && file_test("-f", target)) {
-      pulses <- rbind(readRDS(target), pulses)
+      pulses <- rbind(done, pulses)
     }
     saveRDS(pulses, file = target)
     return(TRUE)
