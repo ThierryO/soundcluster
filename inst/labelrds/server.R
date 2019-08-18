@@ -215,13 +215,15 @@ shinyServer(function(input, output, session) {
       return(NULL)
     }
     data$class <- class_count(pool = data$pool)
-
+    spec_count(pool = data$pool, spectrogram = data$spectrogram,
+               session = session)
     data$current_pulse <- 1
     read_spectrogram(pool = data$pool, spectrogram = data$spectrogram,
                      model = input$node_model) %>%
       mutate(
         raster = shape2raster(.)
       ) -> data$raster
+    data$current_count <- table(data$raster$class)
     if (input$skip_labeled) {
       while (
         data$current_pulse < nrow(data$raster) &&
@@ -548,15 +550,20 @@ shinyServer(function(input, output, session) {
           FROM class ORDER BY abbreviation"
         )
         poolReturn(connection)
-        updateSelectInput(
-          session,
-          "class_id",
-          choices = c(
-            setNames(class$id, class$abbreviation),
-            "[no class]" = "0", "[new class]" = "-1"
-          ),
-          selected = "0"
-        )
+        if (is.null(data$spectrogram)) {
+          updateSelectInput(
+            session,
+            "class_id",
+            choices = c(
+              "[new class]" = "-1", "[no class]" = "0",
+              setNames(class$id, class$abbreviation)
+            ),
+            selected = "0"
+          )
+        } else {
+          spec_count(pool = data$pool, spectrogram = data$spectrogram,
+                     session = session)
+        }
       }
       updateTextInput(session, "class_abbrev", value = "")
       updateTextInput(session, "class_description", value = "")
@@ -591,6 +598,8 @@ shinyServer(function(input, output, session) {
         )
       ) -> data$raster[data$current_pulse, c("colour", "linetype", "angle")]
       poolReturn(connection)
+      spec_count(pool = data$pool, spectrogram = data$spectrogram,
+                 session = session)
       if (data$current_pulse == nrow(data$raster)) {
         return(NULL)
       }
@@ -638,6 +647,8 @@ shinyServer(function(input, output, session) {
         )
       ) -> data$raster[data$current_pulse, c("colour", "linetype", "angle")]
       poolReturn(connection)
+      spec_count(pool = data$pool, spectrogram = data$spectrogram,
+                 session = session)
       if (data$current_pulse == nrow(data$raster)) {
         return(NULL)
       }

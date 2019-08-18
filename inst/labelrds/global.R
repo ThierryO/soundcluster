@@ -418,11 +418,39 @@ set_dropdown <- function(session, pool) {
       session,
       "class_id",
       choices = c(
-        setNames(class$id, class$abbreviation),
-        "[no class]" = "0", "[new class]" = "-1"
+        "[new class]" = "-1", "[no class]" = "0",
+        setNames(class$id, class$abbreviation)
       )
     )
 }
+
+spec_count <- function(pool, spectrogram, session) {
+  conn <- poolCheckout(pool)
+  dbQuoteLiteral(conn, spectrogram) %>%
+    sprintf(fmt = "
+      WITH cte AS (
+        SELECT class, COUNT(id) AS n
+        FROM pulse
+        WHERE spectrogram = %s AND class IS NOT NULL
+        GROUP BY class
+      )
+
+      SELECT id, abbreviation
+      FROM class
+      LEFT JOIN cte ON class.id = cte.class
+      ORDER BY n DESC, abbreviation") %>%
+    dbGetQuery(conn = conn) -> spec_count
+  poolReturn(conn)
+  updateSelectInput(
+    session,
+    "class_id",
+    choices = c(
+      "[new class]" = "-1", "[no class]" = "0",
+      setNames(spec_count$id, spec_count$abbreviation)
+    )
+  )
+}
+
 
 find_start <- function(data, input) {
   start <- mean(
@@ -600,7 +628,7 @@ update_autoencoder <- function(
   poolReturn(conn)
 }
 
-fit_xyf <- function(pool, xdim, ydim) {
+                                                                                                                                                                                                                                                                                                                                                                                        fit_xyf <- function(pool, xdim, ydim) {
   conn <- poolCheckout(pool)
   dbListFields(conn, "autoencoder") %>%
     str_subset("^AE_") %>%
