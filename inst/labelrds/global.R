@@ -136,6 +136,16 @@ connect_pulse_db <- function(path, size = 2 ^ 5) {
   ) %>%
     dbClearResult()
 
+  dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS prediction (
+      pulse INTEGER NOT NULL,
+      node INTEGER NOT NULL,
+      distance REAL NOT NULL
+    )"
+  ) %>%
+    dbClearResult()
+
   poolReturn(connection)
   return(pool)
 }
@@ -173,7 +183,7 @@ import_rds <- function(path, pool, size = 2 ^ 5) {
           ~floor(.x * 256) %>%
             pmax(-255) %>%
             as.data.frame() %>%
-            mutate(row = row_number())
+            mutate(row = seq_len(nrow(.x)))
         )
       ) %>%
       unnest() %>%
@@ -240,8 +250,6 @@ import_rds <- function(path, pool, size = 2 ^ 5) {
   }
 
   dbCommit(connection)
-  dbSendQuery(connection, "VACUUM") %>%
-    dbClearResult()
   on.exit()
   poolReturn(connection)
   return(NULL)
@@ -597,7 +605,7 @@ fit_autoencoder <- function(
 }
 
 update_autoencoder <- function(
-  pool, size = 2 ^ 15, max_time_range = 100, batch_size = 100L, epochs = 50L,
+  pool, size = 2 ^ 5, max_time_range = 100, batch_size = 100L, epochs = 50L,
   epsilon_std = 1.0
 ) {
   shapes <- get_shapes(
