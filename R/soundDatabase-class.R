@@ -29,23 +29,13 @@ setValidity(
     assert_that(
       inherits(connection, "SQLiteConnection"),
       all(
-        c("device", "pulse", "pyramid", "recording", "spectrogram") %in%
+        c("device", "recording", "spectrogram", "pulse") %in%
           dbListTables(connection)
       ),
       all(
         c("id", "make", "model", "serial", "sample_rate", "te_factor",
           "left_channel") %in%
           dbListFields(connection, "device")
-      ),
-      all(
-        c("id", "fingerprint", "spectrogram", "peak_time", "peak_frequency",
-          "peak_amplitude", "start_time", "start_frequency", "start_amplitude",
-          "end_time", "end_frequency", "select_amplitude") %in%
-          dbListFields(connection, "pulse")
-      ),
-      all(
-        c("pulse", "quadrant", "value") %in%
-          dbListFields(connection, "pyramid")
       ),
       all(
         c("id", "fingerprint", "timestamp", "duration", "total_duration",
@@ -55,6 +45,12 @@ setValidity(
       all(
         c("id", "fingerprint", "recording", "window_ms", "overlap") %in%
           dbListFields(connection, "spectrogram")
+      ),
+      all(
+        c("id", "fingerprint", "spectrogram", "peak_time", "peak_frequency",
+          "peak_amplitude", "start_time", "start_frequency",
+          "end_time", "end_frequency") %in%
+          dbListFields(connection, "pulse")
       )
     )
     poolReturn(connection)

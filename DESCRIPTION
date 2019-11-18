@@ -13,10 +13,13 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.1
 Roxygen: list(markdown = TRUE)
+Depends:
+  R (>= 3.5.0)
 Imports:
   assertthat,
   digest,
   kohonen,
+  Matrix,
   methods,
   parallel,
   pool,
@@ -56,3 +59,4 @@ Collate:
     'vif.R'
     'wav2db.R'
     'wav2rds.R'
+    'wav_1dconv.R'

@@ -13,9 +13,18 @@ connect_db <- function(path = ".") {
     file_test("-d", path)
   )
 
-  db <- file.path(path, "soundcluster.sqlite")
+  db <- file.path(path, "soundcluster_1dconv.sqlite")
   pool <- dbPool(drv = SQLite(), dbname = db)
   connection <- poolCheckout(pool)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS location (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      location TEXT NOT NULL
+    )"
+  )
+  dbClearResult(res)
 
   res <- dbSendQuery(
     connection,
@@ -36,6 +45,7 @@ connect_db <- function(path = ".") {
     "CREATE TABLE IF NOT EXISTS recording (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fingerprint TEXT NOT NULL UNIQUE,
+      location INTEGER NOT NULL REFERENCES location (id),
       timestamp INTEGER NOT NULL,
       duration REAL NOT NULL,
       total_duration REAL NOT NULL,
@@ -55,6 +65,33 @@ connect_db <- function(path = ".") {
       overlap REAL NOT NULL,
       min_frequency REAL NOT NULL,
       max_frequency REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS chunk_set (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      spectrogram INTEGER NOT NULL REFERENCES spectrogram (id),
+      time_resolution REAL NOT NULL,
+      frequency_min REAL NOT NULL,
+      frequency_max REAL NOT NULL,
+      frequency_resolution REAL NOT NULL,
+      amplitude_min REAL NOT NULL,
+      amplitude_max REAL NOT NULL,
+      amplitude_threshold REAL NOT NULL
+    )"
+  )
+  dbClearResult(res)
+
+  res <- dbSendQuery(
+    connection,
+    "CREATE TABLE IF NOT EXISTS chunk (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chunk_set INTEGER NOT NULL REFERENCES chunk_set (id),
+      start INTEGER NOT NULL,
+      width INTEGER NOT NULL
     )"
   )
   dbClearResult(res)
@@ -109,145 +146,9 @@ connect_db <- function(path = ".") {
       peak_amplitude REAL NOT NULL,
       start_time REAL NOT NULL,
       start_frequency REAL NOT NULL,
-      start_amplitude REAL NOT NULL,
       end_time REAL NOT NULL,
-      end_frequency REAL NOT NULL,
-      select_amplitude REAL NOT NULL
+      end_frequency REAL NOT NULL
     )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS pyramid (
-      pulse INTEGER NOT NULL REFERENCES pulse (id),
-      quadrant INTEGER NOT NULL,
-      value REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_pyramid ON
-    pyramid (pulse, quadrant)"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE INDEX IF NOT EXISTS idx_pyramid_quadrant ON
-    pyramid (quadrant)"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS model (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      grid_x INTEGER NOT NULL,
-      grid_y INTEGER NOT NULL
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS model_pulse (
-      model INTEGER NOT NULL REFERENCES model (id),
-      pulse INTEGER NOT NULL REFERENCES pulse (id)
-    )"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_pulse ON
-    model_pulse (model, pulse)"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS layer (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      model INTEGER NOT NULL REFERENCES model (id),
-      weight REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS model_variable (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS node (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      model INTEGER NOT NULL REFERENCES model (id),
-      x INTEGER NOT NULL,
-      y INTEGER NOT NULL
-    )"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_node ON
-    node (model, x, y)"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS node_value (
-      node INTEGER NOT NULL REFERENCES node (id),
-      layer INTEGER NOT NULL REFERENCES layer (id),
-      variable INTEGER NOT NULL REFERENCES model_variable (id),
-      value REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_node_value ON
-    node_value (layer, node, variable)"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS scaling (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      model INTEGER NOT NULL REFERENCES model (id),
-      variable INTEGER NOT NULL REFERENCES model_variable (id),
-      center REAL NOT NULL,
-      sd REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-
-  res <- dbSendQuery(
-    connection,
-    "CREATE TABLE IF NOT EXISTS prediction (
-      pulse INTEGER NOT NULL REFERENCES pulse (id),
-      node INTEGER NOT NULL REFERENCES node (id),
-      distance REAL NOT NULL
-    )"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_prediction ON
-    prediction (pulse, node)"
-  )
-  dbClearResult(res)
-  res <- dbSendQuery(
-    connection,
-    "CREATE INDEX IF NOT EXISTS idx_prediction_node ON
-    prediction (node)"
   )
   dbClearResult(res)
 
