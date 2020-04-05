@@ -96,6 +96,21 @@ connect_db <- function(path = ".") {
   )
   dbClearResult(res)
 
+  sql <- paste(
+    "CREATE TABLE IF NOT EXISTS chunk_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chunk INTEGER NOT NULL REFERENCES chunk (id),
+      time INTEGER NOT NULL,
+    ",
+    paste(
+      sprintf("f%02i INTEGER NOT NULL", seq_len(64)),
+      collapse = ",\n"
+    ),
+    ")"
+  )
+  res <- dbSendQuery(connection, sql)
+  dbClearResult(res)
+
   res <- dbSendQuery(
     connection,
     "CREATE TABLE IF NOT EXISTS species (

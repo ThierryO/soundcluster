@@ -103,8 +103,8 @@ wav_1dconv <- function(
           INNER JOIN chunk_set AS cs ON s.id = cs.spectrogram
           INNER JOIN chunk AS c ON cs.id = c.chunk_set
           WHERE r.filename = %s AND location = %s AND time_resolution = %s AND
-          frequency_resolution = %s AND frequency_min = %s AND frequency_max = %s
-          AND amplitude_min = %s AND amplitude_max = %s AND
+          frequency_resolution = %s AND frequency_min = %s AND
+          frequency_max = %s AND amplitude_min = %s AND amplitude_max = %s AND
           amplitude_threshold = %s
           LIMIT 1
           ",
