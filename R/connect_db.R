@@ -13,7 +13,7 @@ connect_db <- function(path = ".") {
     file_test("-d", path)
   )
 
-  db <- file.path(path, "soundcluster_1dconv.sqlite")
+  db <- file.path(path, "soundcluster.sqlite")
   pool <- dbPool(drv = SQLite(), dbname = db)
   connection <- poolCheckout(pool)
 
@@ -87,7 +87,7 @@ connect_db <- function(path = ".") {
 
   res <- dbSendQuery(
     connection,
-    "CREATE TABLE IF NOT EXISTS chunk (
+    "CREATE TABLE IF NOT EXISTS chunk_series (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       chunk_set INTEGER NOT NULL REFERENCES chunk_set (id),
       start INTEGER NOT NULL,
@@ -97,16 +97,12 @@ connect_db <- function(path = ".") {
   dbClearResult(res)
 
   sql <- paste(
-    "CREATE TABLE IF NOT EXISTS chunk_data (
+    "CREATE TABLE IF NOT EXISTS chunk (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      chunk INTEGER NOT NULL REFERENCES chunk (id),
-      time INTEGER NOT NULL,
-    ",
-    paste(
-      sprintf("f%02i INTEGER NOT NULL", seq_len(64)),
-      collapse = ",\n"
-    ),
-    ")"
+      chunk_series INTEGER NOT NULL REFERENCES chunk_set (id),
+      start INTEGER NOT NULL,
+      width INTEGER NOT NULL
+    )"
   )
   res <- dbSendQuery(connection, sql)
   dbClearResult(res)
@@ -156,9 +152,6 @@ connect_db <- function(path = ".") {
       fingerprint TEXT NOT NULL UNIQUE,
       spectrogram INTEGER NOT NULL REFERENCES spectrogram (id),
       class INTEGER REFERENCES class (id),
-      peak_time REAL NOT NULL,
-      peak_frequency REAL NOT NULL,
-      peak_amplitude REAL NOT NULL,
       start_time REAL NOT NULL,
       start_frequency REAL NOT NULL,
       end_time REAL NOT NULL,

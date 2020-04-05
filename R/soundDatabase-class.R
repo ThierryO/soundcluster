@@ -47,8 +47,7 @@ setValidity(
           dbListFields(connection, "spectrogram")
       ),
       all(
-        c("id", "fingerprint", "spectrogram", "peak_time", "peak_frequency",
-          "peak_amplitude", "start_time", "start_frequency",
+        c("id", "fingerprint", "spectrogram", "start_time", "start_frequency",
           "end_time", "end_frequency") %in%
           dbListFields(connection, "pulse")
       )
